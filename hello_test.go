@@ -1,11 +1,6 @@
 package b3
 
-import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-)
-
+/*
 func TestHello(t *testing.T) {
 	want := "Hello, world."
 	if got := Hello(); got != want {
@@ -26,3 +21,7 @@ func TestHello3(t *testing.T) {
 	//fmt.Println("ok here?")
 	assert.Equal(t, true, true)
 }
+
+
+
+ */

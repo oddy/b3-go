@@ -1,6 +1,8 @@
 package b3
 
-// import "encoding/binary"
+import _ "fmt"
+
+
 
 // Actual varint/uvarint encoding is supplied by go's encoding/binary module
 // Tho its functions just panic if there isn't enough space, which is a bit shit.
@@ -21,16 +23,24 @@ package b3
 // and is enabled by go's append() and byte-slice semantics.
 
 
-func EncodeUvarint(x uint) ([]byte,uint) {
-	buf := make([]byte, 1)
-	i := uint(0)
+
+
+func EncodeUvarint(buf []byte, x uint) []byte {
+	//fmt.Println("Encode U varint called with ")
+	cnt := uint(0)
 	for x >= 0x80 {
 		buf = append(buf, byte(x) | 0x80)
 		x >>= 7
-		i++
+		cnt++
 	}
 	buf = append(buf, byte(x))
-	return buf, i+1
+	return buf							// not sure if we need to return cnt+1 here.
 }
 
-
+func EncodeSvarint(buf []byte, x int) []byte {
+	ux := uint(x) << 1
+	if x < 0 {
+		ux = ^ux
+	}
+	return EncodeUvarint(buf, ux)
+}
