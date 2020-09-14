@@ -2,6 +2,7 @@ package b3
 
 import "fmt"
 
+
 // Policy: using uint64 for all numbers. (max interop on 32bit even tho slower).
 //         possibly revisit this. If 32bit performance ends up being a thing (if 32bit ends up being a thing).
 
@@ -32,7 +33,7 @@ func EncodeUvarint(buf []byte, x uint64) []byte {
 	return buf							// not sure if we need to return cnt+1 here.
 }
 
-func EncodeSvarint(buf []byte, x int) []byte {
+func EncodeSvarint(buf []byte, x int64) []byte {
 	ux := uint64(x) << 1
 	if x < 0 {
 		ux = ^ux
@@ -113,12 +114,28 @@ func DecodeUvarintInternal(buf []byte, index int) (uint64, int, error) {       /
 	for i, byt := range buf2 {
 		if byt < 0x80 {												// MSbit clear, final byte.
 			if i > 9 || i == 9 && byt > 1 {							// varint was too big to fit in a uint64
-				return 0, 0, fmt.Errorf("uvarint too large for uint64")
+				return 0, 0, fmt.Errorf("uvarint > uint64")
 			}
 			return result | uint64(byt)<<shift, index + i + 1, nil	// Ok
 		}
 		result |= uint64(byt&0x7f) << shift
 		shift += 7
 	}
-	return 0, 0, fmt.Errorf("uvarint past end of buffer")
+	return 0, 0, fmt.Errorf("uvarint > buffer")
 }
+
+
+func DecodeSvarintInternal(buf []byte, index int) (int64, int, error) { // returns output,index,error
+	ux, resIndex, err := DecodeUvarintInternal(buf, index)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	result := int64(ux >> 1)
+	if ux&1 != 0 {
+		result = ^result
+	}
+	return result, resIndex, nil
+
+}
+

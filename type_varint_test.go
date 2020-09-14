@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// assert parameters tend to be t, then EXPECTED, then ACTUAL.
+// --- Varint API ---
 
-func TestEncodeUvarint(t *testing.T) {
-	var tests = []struct {
+func TestUvarintEncode(t *testing.T) {
+	tests := []struct {
 		input    uint64
 		expected []byte
 	}{
@@ -25,9 +25,33 @@ func TestEncodeUvarint(t *testing.T) {
 	}
 }
 
-func TestEncodeSvarint(t *testing.T) {
+func TestUvarintDecode(t *testing.T) {
 	var tests = []struct {
-		input    int
+		input []byte
+		val   uint64 // setting type here makes it work. testify isn't good with
+		index int    // untyped contants it seems.
+		err   error
+	}{
+		{SBytes("32"), 50, 1, nil},
+		{SBytes("f4 03"), 500, 2, nil},
+		{SBytes("d0 86 03"), 50000, 3, nil},
+		{SBytes("d0 86 83"), 0, 0, fmt.Errorf("uvarint > buffer")},
+		{SBytes("ff ff ff ff ff ff ff ff ff 01"), 18_446_744_073_709_551_615, 10, nil},
+		{SBytes("80 80 80 80 80 80 80 80 80 02"), 0, 0, fmt.Errorf("uvarint > uint64")},
+	}
+	// idiomatic method is to assert each return seperately.
+	for _, test := range tests {
+		val, index, err := DecodeUvarintInternal(test.input, 0)
+		assert.Equal(t, err, test.err) // would use assert.Nil() if simpler.
+		assert.Equal(t, index, test.index)
+		assert.Equal(t, val, test.val)
+	}
+}
+
+
+func TestSvarintEncode(t *testing.T) {
+	tests := []struct {
+		input    int64
 		expected []byte
 	}{
 		{50, SBytes("64")},
@@ -41,20 +65,28 @@ func TestEncodeSvarint(t *testing.T) {
 	}
 }
 
-
-func TestDecodeUvarintInternal(t *testing.T) {
-	buf := SBytes("f4 03")
-	val,idx,err := DecodeUvarintInternal(buf, 0)
-	if val == 500 {
-		fmt.Println("val is 500")
-	} else {
-		fmt.Println("val is NOT 500")
+func TestSvarintDecode(t *testing.T) {
+	var tests = []struct {
+		input []byte
+		val   int64  // setting type here makes it work. testify isn't good with go's normal somewhat-untyped constants
+		index int    // untyped contants it seems.
+		err   error
+	}{
+		{SBytes("64"), 50, 1, nil},
+		{SBytes("63"), -50, 1, nil},
+		{SBytes("aa b4 de 75"), 123456789, 4, nil},
+		{SBytes("a9 b4 de 75"), -123456789, 4, nil},
+		//{SBytes("ff ff ff ff ff ff ff ff ff 01"), 18_446_744_073_709_551_615, 10, nil},
+		//{SBytes("80 80 80 80 80 80 80 80 80 02"), 0, 0, fmt.Errorf("uvarint > uint64")},
 	}
-	//assert.Equal(t, 500, val)
-	assert.Equal(t, val, 500)
-	// 500 by itself is int. I thought constants were typeless?
-	// i think this is a testify assert "problem:
-	// because if val == 500 DOES work.
-	fmt.Println(idx)
-	fmt.Println(err)
+	// idiomatic method is to assert each return seperately.
+	for _, test := range tests {
+		val, index, err := DecodeSvarintInternal(test.input, 0)
+		assert.Equal(t, err, test.err) // would use assert.Nil() if simpler.
+		assert.Equal(t, index, test.index)
+		assert.Equal(t, val, test.val)
+	}
 }
+
+
+
