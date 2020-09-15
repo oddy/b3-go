@@ -1,11 +1,12 @@
 package b3
 
-import "fmt"
+import (
+	"fmt"
+)
 
 
 // Policy: using uint64 for all numbers. (max interop on 32bit even tho slower).
 //         possibly revisit this. If 32bit performance ends up being a thing (if 32bit ends up being a thing).
-
 
 // ===== Encoding =========
 
@@ -20,30 +21,26 @@ import "fmt"
 
 // Policy: Not enough buffer isn't an error because we're append() ing
 
-
-func EncodeUvarint(buf []byte, x uint64) []byte {
-	//fmt.Println("Encode U varint called with ")
-	cnt := uint64(0)
+func EncodeUvarint(x uint64) []byte  {
+	var out []byte
 	for x >= 0x80 {
-		buf = append(buf, byte(x) | 0x80)
+		out = append(out, byte(x)|0x80)
 		x >>= 7
-		cnt++
 	}
-	buf = append(buf, byte(x))
-	return buf							// not sure if we need to return cnt+1 here.
+	out = append(out,byte(x))
+	return out
 }
 
-func EncodeSvarint(buf []byte, x int64) []byte {
+func EncodeSvarint(x int64)  []byte {
 	ux := uint64(x) << 1
 	if x < 0 {
 		ux = ^ux
 	}
-	return EncodeUvarint(buf, ux)
+	return EncodeUvarint(ux)
 }
 
 // in Go, slicing is the low-cost activity, vs slicing being the high cost activity in python
 // So maybe we pass different slices around everywhere, instead of the same slice and a pointer number?
-
 
 // ========= Decoding ==========
 
@@ -62,29 +59,9 @@ func EncodeSvarint(buf []byte, x int64) []byte {
 //      the underlying array is still fine.
 // Fancy people would probably use Byte Readers and stuff like that, but we are going for deadshit simple.
 
-
 // Not gonna bother with readers and writers for now, just byte-slices.
 
 // We should use uint64 for everything we can, and we will have to deal with overflow errors somehow. (panic??)
-
-
-
-// Go version.
-func Uvarint(buf []byte) (uint64, int) {
-	var x uint64
-	var s uint
-	for i, b := range buf {
-		if b < 0x80 {
-			if i > 9 || i == 9 && b > 1 {
-				return 0, -(i + 1) // overflow
-			}
-			return x | uint64(b)<<s, i + 1
-		}
-		x |= uint64(b&0x7f) << s
-		s += 7
-	}
-	return 0, 0
-}
 
 // should we just panic if the uvarint overflows a uint64 ?
 // "Once your code is compiled, there is no difference between uint and uint64 (assuming 64-bit arch). Converting between the two is free"
@@ -97,33 +74,30 @@ func Uvarint(buf []byte) (uint64, int) {
 
 // Because not panicing means we can do stuff like have the highest level do things like disconnect the socket.
 
-
 // Policy: errors: overflow from numbers bigger than u/int64
 // Policy: errors: the varint keep going off the end of the given buffer. We need to check for this.
-
 
 // The varints are self-sizing for the item header, so we DO have to do the buf,index thing.
 // but for the CODECS, we can go the "simple buf" way.
 
 // Policy: indexes are ints now because thats what for:=range shits out.
 
-func DecodeUvarintInternal(buf []byte, index int) (uint64, int, error) {       // returns output,index,error
+func DecodeUvarintInternal(buf []byte, index int) (uint64, int, error) { // returns output,index,error
 	var result uint64
 	var shift uint
 	buf2 := buf[index:]
 	for i, byt := range buf2 {
-		if byt < 0x80 {												// MSbit clear, final byte.
-			if i > 9 || i == 9 && byt > 1 {							// varint was too big to fit in a uint64
+		if byt < 0x80 { // MSbit clear, final byte.
+			if i > 9 || i == 9 && byt > 1 { // varint was too big to fit in a uint64
 				return 0, 0, fmt.Errorf("uvarint > uint64")
 			}
-			return result | uint64(byt)<<shift, index + i + 1, nil	// Ok
+			return result | uint64(byt)<<shift, index + i + 1, nil // Ok
 		}
 		result |= uint64(byt&0x7f) << shift
 		shift += 7
 	}
 	return 0, 0, fmt.Errorf("uvarint > buffer")
 }
-
 
 func DecodeSvarintInternal(buf []byte, index int) (int64, int, error) { // returns output,index,error
 	ux, resIndex, err := DecodeUvarintInternal(buf, index)
@@ -138,4 +112,3 @@ func DecodeSvarintInternal(buf []byte, index int) (int64, int, error) { // retur
 	return result, resIndex, nil
 
 }
-

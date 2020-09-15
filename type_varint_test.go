@@ -20,8 +20,7 @@ func TestUvarintEncode(t *testing.T) {
 		{0, SBytes("00")},
 	}
 	for _, test := range tests {
-		buf := make([]byte, 0)
-		assert.Equal(t, test.expected, EncodeUvarint(buf, test.input))
+		assert.Equal(t, test.expected, EncodeUvarint(test.input))
 	}
 }
 
@@ -60,8 +59,7 @@ func TestSvarintEncode(t *testing.T) {
 		{-123456789, SBytes("a9 b4 de 75")},
 	}
 	for _, test := range tests {
-		buf := make([]byte, 0)
-		assert.Equal(t, test.expected, EncodeSvarint(buf, test.input))
+		assert.Equal(t, test.expected, EncodeSvarint(test.input))
 	}
 }
 
@@ -76,7 +74,7 @@ func TestSvarintDecode(t *testing.T) {
 		{SBytes("63"), -50, 1, nil},
 		{SBytes("aa b4 de 75"), 123456789, 4, nil},
 		{SBytes("a9 b4 de 75"), -123456789, 4, nil},
-		//{SBytes("ff ff ff ff ff ff ff ff ff 01"), 18_446_744_073_709_551_615, 10, nil},
+		//{SBytes("ff ff ff ff ff ff ff ff ff 01"), 18_446_744_073_709_551_615, 10, nil},		// todo: error testing
 		//{SBytes("80 80 80 80 80 80 80 80 80 02"), 0, 0, fmt.Errorf("uvarint > uint64")},
 	}
 	// idiomatic method is to assert each return seperately.
