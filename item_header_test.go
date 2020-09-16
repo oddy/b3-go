@@ -35,12 +35,135 @@ import (
 */
 
 // =====================================================================================================================
+// = Item header
+/*
+func TestItemHeaderEnc(t * testing.T) {
+	tests := []struct {
+		dataType int
+		key      interface{}
+		isNUll   bool
+		dataLen  int
+
+		buf []byte
+		err error
+	}{
+		{0, 0, true, 0,   SBytes("80"),nil},
+	}
+	for _,test := range tests {
+		buf, err := EncodeHeader(test.dataType, test.key, test.isNUll, test.dataLen)
+		assert.Equal(t, test.buf, buf)
+		assert.Equal(t, test.err, err)
+	}
+}
+ */
+
+
+
+// Args:         dataType,  key,  isNull,  dataLen
+
+// --- Header null & has-data bits ENcoder ---
+func TestHeaderNullEnc(t *testing.T) {
+	buf, err := EncodeHeader(0, nil, true, 0)
+	assert.Nil(t, err)
+	assert.Equal(t, SBytes("80"), buf) // isNull true
+}
+
+func TestHeaderHasdataEnc(t *testing.T) {
+	buf, err := EncodeHeader(0, nil, false, 5)
+	assert.Nil(t, err)
+	assert.Equal(t, SBytes("40 05"), buf)					// has-data on, size follows
+}
+
+func TestHeaderZerovalEnc(t *testing.T) {
+	buf, err := EncodeHeader(0, nil, false, 0)
+	assert.Nil(t, err)
+	assert.Equal(t, SBytes("00"), buf)					// not null but no data = compact zero-value mode
+}
+
+// Policy: Encoder: is_null supercedes any datalen info. If null is on, data_len forced to 0, has_data forced to false.
+
+func TestHeaderHasdataButNullEnc(t *testing.T) {
+	buf, err := EncodeHeader(0, nil, true, 5)
+	assert.Nil(t, err)
+	assert.Equal(t, SBytes("80"), buf)					// test that isNull supercedes dataLen
+}
+
+// --- Data len ---
+
+func TestHeaderDatalenEnc(t *testing.T) {
+	buf, err := EncodeHeader(5, nil, false, 5)
+	assert.Nil(t, err)
+	assert.Equal(t, SBytes("45 05"), buf)
+	buf, err =  EncodeHeader(5, nil, false, 1500)
+	assert.Nil(t, err)
+	assert.Equal(t, SBytes("45 dc 0b"), buf)
+}
+
+// --- Ext data type numbers ---
+
+func TestHeaderDatatypeEnc(t *testing.T) {
+	tests := []struct {
+		dataType int
+		buf []byte
+	}{
+		{5,   SBytes("05")},
+		{14,  SBytes("0e")},
+		{15,  SBytes("0f 0f")},
+		{16,  SBytes("0f 10")},
+		{555, SBytes("0f ab 04")},
+	}
+	for _,test := range tests {
+		buf, err := EncodeHeader(test.dataType, nil, false, 0)
+		assert.Nil(t, err)
+		assert.Equal(t, test.buf, buf)
+	}
+}
+
+// --- Keys ---
+
+func TestHeaderKeysEnc(t *testing.T) {
+	tests := []struct {
+		key interface{}
+		buf []byte
+	}{
+		{nil, 			SBytes("00")},
+		{4,   			SBytes("10 04")},
+		{7777777, 		SBytes("10 f1 db da 03")},
+		{"foo",			SBytes("20 03 66 6f 6f")},
+		{"Виагра",  	SBytes("20 0c d0 92 d0 b8 d0 b0 d0 b3 d1 80 d0 b0")},
+		{[]byte("foo"), SBytes("30 03 66 6f 6f")},
+	}
+	for _, test := range tests {
+		buf, err := EncodeHeader(0, test.key, false, 0)
+		assert.Nil(t, err)
+		assert.Equal(t, test.buf, buf)
+	}
+}
+
+
+// --- Kitchen sink ---
+
+func TestHeaderAllEnc(t *testing.T) {
+	buf, err := EncodeHeader(555, "foo", false, 1500)
+	assert.Nil(t, err)
+	exBuf := SBytes("6f ab 04 03 66 6f 6f dc 0b")
+    //               --                              control: null=no  data=yes  key=1,0 (UTF8)  data_type=extended (1,1,1,1)
+    //                  -----                        ext type uvarint (555)
+    //                        --                     len of utf8 key (3 bytes)
+    //                           --------            utf8 key "foo"
+    //                                    -----      data len (1500)
+    assert.Equal(t, exBuf, buf)
+}
+
+
+
+// =====================================================================================================================
 // = Item header keys
 
 func TestKeytypeEnc(t *testing.T) {
 	tests := []struct {
 		input interface{}
-		kcode int
+		kcode byte
 		buf   []byte
 		err   error
 	}{
@@ -61,9 +184,6 @@ func TestKeytypeEnc(t *testing.T) {
 	}
 }
 
-func TestKeytypeDec(t *testing.T) {
-
-}
 
 // =====================================================================================================================
 // = Two different kinds of building byte buffers.
@@ -162,3 +282,4 @@ func BenchmarkAppendBuffer(b *testing.B) {
 		_ = a.Bytes()
 	}
 }
+

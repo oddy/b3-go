@@ -37,14 +37,63 @@ import (
 //         Because thats how the python code does it and it will make the code very simple and straight-port.
 //         See "Journey of pain" below for how we got here.
 
-// Policy: Screw it, use int and uint everywhere. "int" is the default type and it will mean a lot less casting.
+// Policy: Screw it, use int everywhere we can. "int" is the default type and it will mean a lot less casting.
+
+//func Byte2Bytes(x byte) []byte
+
+func EncodeHeader(dataType int, key interface{}, isNull bool, dataLen int) ([]byte, error) {
+	var extDataTypeBytes []byte
+	var lenBytes []byte
+	var cbyte byte
+
+	// --- Null & data len ---
+	if isNull {
+		cbyte |= 0x80 								// data value is null. Note: null supercedes has-data
+	} else {
+		if dataLen > 0 {
+			cbyte |= 0x40							// has data flag on
+			lenBytes = append(lenBytes, EncodeUvarint(dataLen)...)
+		}
+	}
+	// fmt.Printf("cbyte is %02x\n",cbyte)
+
+
+	// --- Key type ---
+	keyTypeBits, keyBytes, err := EncodeKey(key)
+	if err != nil {
+		return []byte{}, err
+	}
+	cbyte |= keyTypeBits & 0x30					// middle 2 bits for key type
+
+	// fmt.Printf("cbyte is %02x\n",cbyte)
+
+	// --- Data type ---
+	if dataType < 0 {							// Sanity S
+		return []byte{}, fmt.Errorf("-ve data types not permitted")
+	}
+
+	if dataType > 14 { 							// 'extended' data types 15 and up are a seperate uvarint
+		extDataTypeBytes = append(extDataTypeBytes, EncodeUvarint(dataType)...)
+		cbyte |= 0x0f 							// control byte data_typeck bits set to all 1's to signify this
+	} else {
+		cbyte |= byte(dataType) & 0x0f
+	}
+
+	// --- Build header ---
+	// fmt.Printf("cbyte is %02x\n",cbyte)
+	out := bytes.Join([][]byte{ []byte{cbyte}, extDataTypeBytes, keyBytes, lenBytes  }, nil)
+	return out, nil
+
+}
+
+
+
 
 // Gonna do this with an interface and a typeswitch.
 // "The zero value of a slice is nil". Also there are "nil slices" and "empty slices".
-
 // You can cast a -ve into to a uint, you get a yuuge number. So it lets you do it and "C's you up"
 
-func EncodeKey(ikey interface{}) (int, []byte, error) {
+func EncodeKey(ikey interface{}) (byte, []byte, error) {
 	switch key := ikey.(type) {
 
 	// case types.Nil: // also nil slice and/or empty slice?
@@ -71,8 +120,20 @@ func EncodeKey(ikey interface{}) (int, []byte, error) {
 	default:
 		return 0, []byte{}, fmt.Errorf("unknown key type (not nil/int/str/bytes)")
 	}
-
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // Remember reallocations are also copies.
 
