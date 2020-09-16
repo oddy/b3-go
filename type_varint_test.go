@@ -11,7 +11,7 @@ import (
 
 func TestUvarintEncode(t *testing.T) {
 	tests := []struct {
-		input    uint64
+		input    int
 		expected []byte
 	}{
 		{50, SBytes("32")},
@@ -50,7 +50,7 @@ func TestUvarintDecode(t *testing.T) {
 
 func TestSvarintEncode(t *testing.T) {
 	tests := []struct {
-		input    int64
+		input    int
 		expected []byte
 	}{
 		{50, SBytes("64")},

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 /*
@@ -35,19 +37,31 @@ import (
 // =====================================================================================================================
 // = Item header keys
 
-func TestKeytypeNoneIntEnc(t *testing.T) {
-
+func TestKeytypeEnc(t *testing.T) {
+	tests := []struct {
+		input interface{}
+		kcode int
+		buf   []byte
+		err   error
+	}{
+		{nil, 			0x00, []byte{}, nil},
+		{4, 			0x10, SBytes("04"), nil},
+		{7777777, 		0x10, SBytes("f1 db da 03"), nil},
+		{"foo", 		0x20, SBytes("03 66 6f 6f"), nil},
+		{"Виагра", 		0x20, SBytes("0c d0 92 d0 b8 d0 b0 d0 b3 d1 80 d0 b0"), nil},
+		{[]byte("foo"), 0x30, SBytes("03 66 6f 6f"), nil},
+		{-4, 			0, []byte{}, fmt.Errorf("negative int keys are not supported")},
+		{true,			0, []byte{}, fmt.Errorf("unknown key type (not nil/int/str/bytes)")},
+	}
+	for _, test := range tests {
+		kcode, buf, err := EncodeKey(test.input)
+		assert.Equal(t, test.kcode, kcode)
+		assert.Equal(t, test.buf, buf)
+		assert.Equal(t, test.err, err)
+	}
 }
 
-func TestKeytypeNoneIntDec(t *testing.T) {
-
-}
-
-func TestKeytypeStrBytesEnc(t *testing.T) {
-
-}
-
-func TestKeytypeStrBytesDec(t *testing.T) {
+func TestKeytypeDec(t *testing.T) {
 
 }
 
@@ -70,7 +84,7 @@ func TestAppendVariadic(t *testing.T) {
 	a = append(a, n)
 	a = append(a, o...)
 	a = append(a, p...)
-	a = append(a, z...)   // variadic args thing for appending a byte slice to a byte slice
+	a = append(a, z...) // variadic args thing for appending a byte slice to a byte slice
 	a = append(a, y...)
 	// a = append(a, c, d)  // we can append multiple bytes
 	// The variadic args thing is performant and reference-y, its NOT actually unpacking the bytes like xargs would.
@@ -102,7 +116,6 @@ func TestAppendBuffer(t *testing.T) {
 // When designing interfaces, avoid making a distinction between a nil slice and a non-nil, zero-length slice, as this can lead to subtle programming errors.
 // The Go wiki:  https://github.com/golang/go/wiki/CodeReviewComments#declaring-empty-slices
 
-
 // =====================================================================================================================
 // = Some Benchmarking
 
@@ -130,7 +143,7 @@ func BenchmarkAppendVariadic(b *testing.B) {
 		a = append(a, n)
 		a = append(a, z...) // variadic args thing for appending a byte slice to a byte slice
 		a = append(a, y...)
-		_ = a				// This is how we stop "variable declared and not used" errors.
+		_ = a // This is how we stop "variable declared and not used" errors.
 	}
 }
 
@@ -149,4 +162,3 @@ func BenchmarkAppendBuffer(b *testing.B) {
 		_ = a.Bytes()
 	}
 }
-

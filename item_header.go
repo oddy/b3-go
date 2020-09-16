@@ -1,9 +1,9 @@
 package b3
 
 import (
-	"fmt"
 	"bytes"
-	"go/types"
+	"fmt"
+	_ "go/types"
 )
 
 /*
@@ -17,7 +17,7 @@ import (
  +------------+------------+------------+------------+------------+------------+------------+------------+
 
  +------------+------------+
- | is null    | has data   |
+ | is null    | has data   |9
  +------------+------------+
      1   x  (2)    Value is None/NULL/nil - data len & has data ignored
      0   0  (0)    Codec zero-value for given data type (0, "", 0.0 etc)
@@ -32,52 +32,47 @@ import (
      1   1  (c)    raw bytess
 */
 
-
 // Policy: DONT GET FANCY
 // Policy: returning byteslices everywhere, then return bytes.Join( [][]byte{x,y,z} , nil )
 //         Because thats how the python code does it and it will make the code very simple and straight-port.
 //         See "Journey of pain" below for how we got here.
 
+// Policy: Screw it, use int and uint everywhere. "int" is the default type and it will mean a lot less casting.
 
 // Gonna do this with an interface and a typeswitch.
 // "The zero value of a slice is nil". Also there are "nil slices" and "empty slices".
 
+// You can cast a -ve into to a uint, you get a yuuge number. So it lets you do it and "C's you up"
+
 func EncodeKey(ikey interface{}) (int, []byte, error) {
-	switch key3 := ikey.(type) {
-	case types.Nil: // also nil slice and/or empty slice?
+	switch key := ikey.(type) {
+
+	// case types.Nil: // also nil slice and/or empty slice?
+	//	return 0x00, []byte{}, nil
+
+	case nil: // also nil slice and/or empty slice?		// does this work?
 		return 0x00, []byte{}, nil
-	case uint, uint8, uint32, uint64: // or just uint64 because thats what EncodeUvarint expects.
-		return 0x10, EncodeUvarint(key3), nil
+
+	case int:		// note: if you e.g. "case int,uint:"  go doesn't concretize and you get interface{}
+		if key < 0 {
+			return 0, []byte{}, fmt.Errorf("negative int keys are not supported")
+		}
+		return 0x10, EncodeUvarint(key), nil
+
 	case string:
-		keyBytes := []byte(key3) 			// like strings ARE utf8 bytes sooo this should be ok
-		lenBytes := EncodeUvarint(uint64(len(keyBytes)))
-		return 0x20, bytes.Join([][]byte{lenBytes, keyBytes},nil), nil
+		keyBytes := []byte(key) // like strings ARE utf8 bytes sooo this should be ok
+		lenBytes := EncodeUvarint(len(keyBytes))
+		return 0x20, bytes.Join([][]byte{lenBytes, keyBytes}, nil), nil
+
 	case []byte:
-		lenBytes := EncodeUvarint(uint64(len(key3)))
-		return 0x40, bytes.Join([][]byte{lenBytes, key3}, nil), nil
+		lenBytes := EncodeUvarint(len(key))
+		return 0x30, bytes.Join([][]byte{lenBytes, key}, nil), nil
+
 	default:
-		return 0, []byte{}, fmt.Errof("unknown key type (not nil/uint/str/bytes)")
+		return 0, []byte{}, fmt.Errorf("unknown key type (not nil/int/str/bytes)")
 	}
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // Remember reallocations are also copies.
 
@@ -124,6 +119,3 @@ func EncodeKey(ikey interface{}) (int, []byte, error) {
 
 // So we're gonna Not Get Fancy and just have a lot of byte slice returning going on and concatenating them etc when we need to.
 // SO item header and the little codecs at least, Just Return A Byte Slice.
-
-
-

@@ -21,7 +21,7 @@ import (
 
 // Policy: Not enough buffer isn't an error because we're append() ing
 
-func EncodeUvarint(x uint64) []byte  {
+func EncodeUvarint(x int) []byte  {				// todo: figure out about uints vs ints coming in here.
 	var out []byte
 	for x >= 0x80 {
 		out = append(out, byte(x)|0x80)
@@ -31,12 +31,12 @@ func EncodeUvarint(x uint64) []byte  {
 	return out
 }
 
-func EncodeSvarint(x int64)  []byte {
+func EncodeSvarint(x int)  []byte {
 	ux := uint64(x) << 1
 	if x < 0 {
 		ux = ^ux
 	}
-	return EncodeUvarint(ux)
+	return EncodeUvarint(int(ux))
 }
 
 // in Go, slicing is the low-cost activity, vs slicing being the high cost activity in python
@@ -70,12 +70,9 @@ func EncodeSvarint(x int64)  []byte {
 // for our quick hack, we're targetting decode into struct.
 // if the struct members are smaller than uint64 then we will have to deal with overflow errors.
 
-// Policy: return uint64 for all numbers and deal with overflow errors.
 
 // Because not panicing means we can do stuff like have the highest level do things like disconnect the socket.
 
-// Policy: errors: overflow from numbers bigger than u/int64
-// Policy: errors: the varint keep going off the end of the given buffer. We need to check for this.
 
 // The varints are self-sizing for the item header, so we DO have to do the buf,index thing.
 // but for the CODECS, we can go the "simple buf" way.
