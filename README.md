@@ -12,6 +12,8 @@ The small number of lovingly-handcrafted data types means often the only choice 
 
 This is the Golang version. For more information & wire-format documentation, see the python reference implementation https://github.com/oddy/b3
 
+This code is currently PRE-ALPHA, WIP/incomplete. 
+
 * SCHED and DECIMAL support TBC
 * Current composite support is dict-like to/from golang Structs. python/json dynamic-style list/dict with all-interface{}-s TBC.
 
