@@ -1,4 +1,4 @@
-# b3-go
+# B3-go = Better Binary Buffers, for Go
 B3 is a binary serializer which is easy like json, compact like msgpack, and powerful like protobuf,
 
 B3 is a data serializer, it packs data structures to bytes & vice versa. It has:
