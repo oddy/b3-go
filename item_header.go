@@ -39,7 +39,6 @@ import (
 
 // Policy: Screw it, use int everywhere we can. "int" is the default type and it will mean a lot less casting.
 
-//func Byte2Bytes(x byte) []byte
 
 func EncodeHeader(dataType int, key interface{}, isNull bool, dataLen int) ([]byte, error) {
 	var extDataTypeBytes []byte
