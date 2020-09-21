@@ -163,16 +163,28 @@ func TestKeytypeEnc(t *testing.T) {
 }
 
 
+func TestKeytypeDec(t * testing.T) {
+	tests := []struct {
+		kbits byte
+		buf   []byte
+
+		output interface{}
+		outIndex int
+		err   error
+	} {
+		{0x00, SBytes(""),   nil, 0, nil},
+		{0x10, SBytes("04"), 4, 1, nil},
+		{0x10, SBytes("f1 f0 dd fc 1c"),  7777777777, 5, nil},
+	}
+	for _,test := range tests {
+		out, outIndex, err := DecodeKey(test.kbits, test.buf, 0)
+		assert.Equal(t, test.output, out)
+		assert.Equal(t, test.outIndex, outIndex)
+		assert.Equal(t, test.err, err)
+	}
 
 
-
-
-
-
-
-
-
-
+}
 
 
 

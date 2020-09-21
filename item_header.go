@@ -98,7 +98,8 @@ func EncodeKey(ikey interface{}) (byte, []byte, error) {
 	case nil: // also nil slice and/or empty slice?		// does this work?
 		return 0x00, []byte{}, nil
 
-	// note: if you e.g. "case int,uint:"  go doesn't concretize and you get interface{}
+	// note:   if you e.g. "case int,uint:"  go doesn't concretize and you get interface{}
+	// policy: only accepting ints for now, prefer Simplicity over flexibility(?)
 	case int:
 		if key < 0 {
 			return 0, []byte{}, fmt.Errorf("negative int keys are not supported")
@@ -119,7 +120,7 @@ func EncodeKey(ikey interface{}) (byte, []byte, error) {
 	}
 }
 
-/*
+
 func DecodeKey(keyTypeBits byte, buf []byte, index int) (interface{}, int, error) {
 	if keyTypeBits == 0x00 {
 		return nil, index, nil
@@ -138,9 +139,19 @@ func DecodeKey(keyTypeBits byte, buf []byte, index int) (interface{}, int, error
 		return keyStr, nextIndex+klen, nil
 	}
 
+	if keyTypeBits == 0x30 {
+		klen, nextIndex, err := DecodeUvarint(buf, index)
+		if err != nil {
+			return nil, index, err
+		}
+		keyBytes := buf[nextIndex : nextIndex + klen]
+		return keyBytes, nextIndex+klen, nil
+	}
+
+	return nil, index, fmt.Errorf("invalid key type in control byte")
 }
 
-*/
+
 
 
 
