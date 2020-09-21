@@ -95,13 +95,11 @@ func EncodeHeader(dataType int, key interface{}, isNull bool, dataLen int) ([]by
 func EncodeKey(ikey interface{}) (byte, []byte, error) {
 	switch key := ikey.(type) {
 
-	// case types.Nil: // also nil slice and/or empty slice?
-	//	return 0x00, []byte{}, nil
-
 	case nil: // also nil slice and/or empty slice?		// does this work?
 		return 0x00, []byte{}, nil
 
-	case int:		// note: if you e.g. "case int,uint:"  go doesn't concretize and you get interface{}
+	// note: if you e.g. "case int,uint:"  go doesn't concretize and you get interface{}
+	case int:
 		if key < 0 {
 			return 0, []byte{}, fmt.Errorf("negative int keys are not supported")
 		}
@@ -121,9 +119,28 @@ func EncodeKey(ikey interface{}) (byte, []byte, error) {
 	}
 }
 
+/*
+func DecodeKey(keyTypeBits byte, buf []byte, index int) (interface{}, int, error) {
+	if keyTypeBits == 0x00 {
+		return nil, index, nil
+	}
 
+	if keyTypeBits == 0x10 {
+		return DecodeUvarint(buf, index)					// Note also would return error
+	}
 
+	if keyTypeBits == 0x20 {
+		klen, nextIndex, err := DecodeUvarint(buf, index)
+		if err != nil {
+			return nil, index, err
+		}
+		keyStr := string(buf[nextIndex : nextIndex + klen])
+		return keyStr, nextIndex+klen, nil
+	}
 
+}
+
+*/
 
 
 

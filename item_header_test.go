@@ -36,28 +36,6 @@ import (
 
 // =====================================================================================================================
 // = Item header
-/*
-func TestItemHeaderEnc(t * testing.T) {
-	tests := []struct {
-		dataType int
-		key      interface{}
-		isNUll   bool
-		dataLen  int
-
-		buf []byte
-		err error
-	}{
-		{0, 0, true, 0,   SBytes("80"),nil},
-	}
-	for _,test := range tests {
-		buf, err := EncodeHeader(test.dataType, test.key, test.isNUll, test.dataLen)
-		assert.Equal(t, test.buf, buf)
-		assert.Equal(t, test.err, err)
-	}
-}
- */
-
-
 
 // Args:         dataType,  key,  isNull,  dataLen
 
@@ -183,6 +161,19 @@ func TestKeytypeEnc(t *testing.T) {
 		assert.Equal(t, test.err, err)
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 // =====================================================================================================================

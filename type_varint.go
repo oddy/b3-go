@@ -10,15 +10,6 @@ import (
 
 // ===== Encoding =========
 
-// For ENcoding we take a given []byte and append() to it then return it.
-// So its fast because pointer and go can do its realloc trick only when needed. Nice!
-
-// This is really simple for indifr the functions, integrates really nicely with
-// "upstairs" callers, and is still quite performant.
-
-// It's actually a lot nicer than b3-py's "return buf fragments and join() them a lot" model,
-// and is enabled by go's append() and byte-slice semantics.
-
 // Policy: Not enough buffer isn't an error because we're append() ing
 
 func EncodeUvarint(x int) []byte  {				// todo: figure out about uints vs ints coming in here.
@@ -39,10 +30,62 @@ func EncodeSvarint(x int)  []byte {
 	return EncodeUvarint(int(ux))
 }
 
-// in Go, slicing is the low-cost activity, vs slicing being the high cost activity in python
-// So maybe we pass different slices around everywhere, instead of the same slice and a pointer number?
 
 // ========= Decoding ==========
+
+
+// Policy: indexes are ints now because thats what for:=range shits out.
+
+// --- Decoding into fixed-size numeric variables and pre-checking to stave off overflow panics. ---
+// (2^64)-1  =  18_446_744_073_709_551_615  =  \xff\xff\xff\xff\xff\xff\xff\xff\xff\x01
+// (2^64)    =  18_446_744_073_709_551_616  =  \x80\x80\x80\x80\x80\x80\x80\x80\x80\x02
+// Hence the if i > 9 || i == 9 && byt > 1 {  return 0,0, fmt.Errorf("uvarint > uint64") }
+
+// For "over int" its easier because...
+// (2^63)-1  =   9_223_372_036_854_775_807  =  \xff\xff\xff\xff\xff\xff\xff\xff\x7f
+// (2^63)    =   9_223_372_036_854_775_808  =  \x80\x80\x80\x80\x80\x80\x80\x80\x80\x01
+// ... its when i goes from 8 to 9.
+
+
+func DecodeUvarint(buf []byte, index int) (int, int, error) { // returns output,index,error
+	var result int
+	var shift int
+	buf2 := buf[index:]
+	for i, byt := range buf2 {
+		if byt < 0x80 { // MSbit clear, final byte.
+			if i >= 9 {
+				return 0, 0, fmt.Errorf("uvarint > int64")
+			}
+			return result | int(byt)<<shift, index + i + 1, nil // Ok
+		}
+		result |= int(byt&0x7f) << shift
+		shift += 7
+	}
+	return 0, 0, fmt.Errorf("uvarint > buffer")
+}
+
+func DecodeSvarint(buf []byte, index int) (int, int, error) { // returns output,index,error
+	ux, resIndex, err := DecodeUvarint(buf, index)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	result := int(ux >> 1)
+	if ux&1 != 0 {
+		result = ^result
+	}
+	return result, resIndex, nil
+}
+
+
+
+
+
+
+
+
+
+// ==== this might be old/invalid now? ====
 
 // In python we use buf,index and return value,index
 // And we do a lot of IntByteAt and
@@ -76,36 +119,3 @@ func EncodeSvarint(x int)  []byte {
 
 // The varints are self-sizing for the item header, so we DO have to do the buf,index thing.
 // but for the CODECS, we can go the "simple buf" way.
-
-// Policy: indexes are ints now because thats what for:=range shits out.
-
-func DecodeUvarintInternal(buf []byte, index int) (uint64, int, error) { // returns output,index,error
-	var result uint64
-	var shift uint
-	buf2 := buf[index:]
-	for i, byt := range buf2 {
-		if byt < 0x80 { // MSbit clear, final byte.
-			if i > 9 || i == 9 && byt > 1 { // varint was too big to fit in a uint64
-				return 0, 0, fmt.Errorf("uvarint > uint64")
-			}
-			return result | uint64(byt)<<shift, index + i + 1, nil // Ok
-		}
-		result |= uint64(byt&0x7f) << shift
-		shift += 7
-	}
-	return 0, 0, fmt.Errorf("uvarint > buffer")
-}
-
-func DecodeSvarintInternal(buf []byte, index int) (int64, int, error) { // returns output,index,error
-	ux, resIndex, err := DecodeUvarintInternal(buf, index)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	result := int64(ux >> 1)
-	if ux&1 != 0 {
-		result = ^result
-	}
-	return result, resIndex, nil
-
-}

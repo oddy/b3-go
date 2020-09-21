@@ -52,11 +52,26 @@ func EncodeFloat64(value float64) []byte {
 // it would grow an error return which means all the other encoders would grow an error return too.
 // this may still happen.
 
-// Come back to this one. 
+// come back to this one.
+//
 
 func EncodeStamp64(value time.Time) []byte {
 	nano := value.UnixNano()
 	out := make([]byte, 8)
-	binary.LittleEndian.PutUint64(out, nano)
+	binary.LittleEndian.PutUint64(out, uint64(nano))
 	return out
 }
+
+
+func EncodeComplex(value complex128) []byte {
+	if value == 0 {								// confirmed this works, nice syntactic sugar
+		return []byte{}
+	}
+	out := make([]byte, 16)
+	binary.LittleEndian.PutUint64(out,     math.Float64bits(real(value)))
+	binary.LittleEndian.PutUint64(out[8:], math.Float64bits(imag(value)))
+	return out
+}
+
+
+
