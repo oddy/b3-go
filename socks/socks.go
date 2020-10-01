@@ -42,12 +42,12 @@ func ConnectLoop() {
 }
 
 //const TIMEOUT = 2 * time.Minute		// prod
-const TIMEOUT = 4 * time.Second			// testing
+const TIMEOUT = 2 * time.Second			// testing
 
 func ReceiveByte(conn net.Conn) (byte, error) {
 	var err error
 	if err = conn.SetReadDeadline(time.Now().Add(TIMEOUT)); err != nil {
-		return 0x00, errors.Wrap(err, "set deadline")
+		return 0x00, errors.Wrap(err, "set timout")
 	}
 	wbuf := make([]byte, 1)
 	_,err = conn.Read(wbuf)
@@ -152,10 +152,10 @@ func CommsLoop(conn net.Conn) error {
 		}
 
 		if cc == 0x88 {
-			fmt.Println("got ping, continuing")
+			fmt.Println("\ngot ping, continuing")
 			continue
 		}
-		fmt.Println("got start of message.")
+		fmt.Println("\ngot start of message.")
 
 		// 0x69 = int-key = BMQ-LL
 		cc,err = Expect(conn, []byte{0x69})
@@ -166,12 +166,39 @@ func CommsLoop(conn net.Conn) error {
 		fmt.Println("Woo, BMQ-LL message!")
 		// Data len uvarint is next
 
-		var dataLen int										// 0 by default
-		dataLen, err = ReadUvarint(conn)					// we know hasData is on, so
+		var dataLen int											// 0 by default
+		dataLen, err = ReadUvarint(conn)						// we know hasData is on, so
 		if err != nil {
 			return errors.Wrap(err, "datalen ReadUvarint")
 		}
 		fmt.Println("Datalen: ",dataLen)
+		// todo: cap dataLen
+
+		// make a buffer that big, read that many bytes into it, then do stuff (b3 decode?) with the buffer. SS
+		buf := make([]byte, dataLen)							// read reads up to the LEN of the slice not the CAP
+		// buf len and dataLen are the same.
+		// Loop-read until its full.
+		for nread := 0; nread < dataLen; {
+			// re-up the timeout  (lol go deadlines lol)
+			if err = conn.SetReadDeadline(time.Now().Add(TIMEOUT)); err != nil {
+				return errors.Wrap(err, "set timout")
+			}
+			fmt.Println("\ncalling read, nread ",nread,"  buf len ",len(buf))
+			n,nerr := conn.Read(buf[nread:])
+			fmt.Println("n    = ",n)
+			fmt.Println("nerr = ",nerr)
+			if nerr != nil {
+				return errors.Wrap(nerr, "buffer read")
+			}
+			if n == 0 {
+				fmt.Println("read 0")
+				break
+			}
+			fmt.Print(Hexdump(buf, dataLen), "\n")
+			nread += n
+			fmt.Println("nread now ",nread)
+		}
+		fmt.Println("Done")
 
 
 	}
