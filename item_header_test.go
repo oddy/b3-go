@@ -138,6 +138,11 @@ func TestHeaderAllEnc(t *testing.T) {
 // =====================================================================================================================
 // = Item header keys
 
+
+// t.Run enables running “subtests”, one for each table entry. These are shown separately when executing go test -v
+//
+// https://gobyexample.com/testing
+
 func TestKeytypeEnc(t *testing.T) {
 	tests := []struct {
 		input interface{}
@@ -162,8 +167,9 @@ func TestKeytypeEnc(t *testing.T) {
 	}
 }
 
+// policy: "all returns are invalid if err != nil"
 
-func TestKeytypeDec(t * testing.T) {
+func TestKeytypeDec(t *testing.T) {
 	tests := []struct {
 		kbits byte
 		buf   []byte
@@ -172,9 +178,26 @@ func TestKeytypeDec(t * testing.T) {
 		outIndex int
 		err   error
 	} {
-		{0x00, SBytes(""),   nil, 0, nil},
-		{0x10, SBytes("04"), 4, 1, nil},
-		{0x10, SBytes("f1 f0 dd fc 1c"),  7777777777, 5, nil},
+		/*
+		{0x00, SBytes(""),   					nil, 		0, nil},
+		{0x10, SBytes("04"), 					4, 			1, nil},
+		{0x10, SBytes("f1 f0 dd fc 1c"),  		7777777777, 5, nil},
+		{0x20, SBytes("03 66 6f 6f"),			"foo", 		4, nil},
+		{0x20, SBytes("0c d0 92 d0 b8 d0 b0 d0 b3 d1 80 d0 b0"), "Виагра", 13, nil},
+		{0x30, SBytes("03 66 6f 6f"),	 []byte("foo"),		4, nil},
+
+		// Ensure coverage of the DecodeVarint error-handling paths
+		{0x10, SBytes("80 80"),	 		0,   0,		fmt.Errorf("uvarint > buffer")},
+		{0x20, SBytes("80 80"),	 		nil, 0,		fmt.Errorf("uvarint > buffer")},
+		{0x30, SBytes("80 80"),	 		nil, 0,		fmt.Errorf("uvarint > buffer")},
+
+		// Ensure coverage of the slice limits check error-handling paths
+		// In Python if there isn't enough buffer, slicing just returns what IS available
+		// In Go if there isn't enough buffer, it panics.
+		{0x30, SBytes("0a 31 32 33"),	nil, 0,		fmt.Errorf("uvarint > buffer")},
+		*/
+		{0x20, SBytes("03 31 32 33")}
+
 	}
 	for _,test := range tests {
 		out, outIndex, err := DecodeKey(test.kbits, test.buf, 0)
@@ -230,7 +253,7 @@ func TestAppendBuffer(t *testing.T) {
 	a.Write(p)
 	a.Write(z)
 	a.Write(y)
-	fmt.Println(a.Bytes())
+	// fmt.Println(a.Bytes())
 }
 
 // The go wiki says:

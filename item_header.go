@@ -2,6 +2,7 @@ package b3
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	_ "go/types"
 )
@@ -87,16 +88,28 @@ func EncodeHeader(dataType int, key interface{}, isNull bool, dataLen int) ([]by
 
 
 
+// todo: its still slightly up in the air what index we return if there is an error.
+//       in python, decode_header exceptions are unhandled even by the composite unpackers, so it blows straight
+//       through to user code. So there's no actual answer yet, but going forward we should maintain a policy of:
+// policy: "all returns are invalid if err != nil"
+
+
 
 // Gonna do this with an interface and a typeswitch.
 // "The zero value of a slice is nil". Also there are "nil slices" and "empty slices".
 // You can cast a -ve into to a uint, you get a yuuge number. So it lets you do it and "C's you up"
 
 func EncodeKey(ikey interface{}) (byte, []byte, error) {
+
+	_ = json.Encoder()
+
 	switch key := ikey.(type) {
+
+
 
 	case nil: // also nil slice and/or empty slice?		// does this work?
 		return 0x00, []byte{}, nil
+
 
 	// note:   if you e.g. "case int,uint:"  go doesn't concretize and you get interface{}
 	// policy: only accepting ints for now, prefer Simplicity over flexibility(?)
@@ -120,6 +133,27 @@ func EncodeKey(ikey interface{}) (byte, []byte, error) {
 	}
 }
 
+// we have to precheck slices, because exceeding limits is a panic!, instead of a besteffort like in python.
+
+// nextIndex should be pointing to the location of the start of the key, so keystuff[0]/
+// if there is no keystuff, then nextIndex will == len(buf)
+
+// Go is a little weird - in a len(3) buf e.g. "foo",
+// [3] blows up as you'd expect (next char after final 'o'), [3:4] blows up too (4 > len), BUT
+// [3:3] is ok and returns [].
+
+// Do we do a lot of error checking, or do we make a slice-function that acts like python's does?
+
+
+// the DEcoders are going to just be given slices. The bounds-checking will be done by the codec's caller.
+
+
+// "it’s idiomatic to have functions like slice = doSomethingWithSlice(slice) and less so to see doSomethingWithSlice(&slice)"
+
+
+// We don't need to pass buf and index if we're passing slices around all the time. Just pass a new slice.
+// You can see in DecodeUvarint
+
 
 func DecodeKey(keyTypeBits byte, buf []byte, index int) (interface{}, int, error) {
 	if keyTypeBits == 0x00 {
@@ -134,6 +168,17 @@ func DecodeKey(keyTypeBits byte, buf []byte, index int) (interface{}, int, error
 		klen, nextIndex, err := DecodeUvarint(buf, index)
 		if err != nil {
 			return nil, index, err
+		}
+
+		// result returned from DecodeUvarint will never be negative.
+		// index returned from DecodeUvarint will never be less than index passed in.
+
+		// Assuming the index
+
+
+		end := nextIndex + klen
+		if end >= len(buf) {
+			return nil, index, fmt.Errorf("key size > buffer len")
 		}
 		keyStr := string(buf[nextIndex : nextIndex + klen])
 		return keyStr, nextIndex+klen, nil

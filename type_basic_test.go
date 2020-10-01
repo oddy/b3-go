@@ -1,9 +1,7 @@
 package b3
 
 import (
-	"fmt"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -31,13 +29,16 @@ func TestBaseFloat64Enc(t *testing.T) {
 	assert.Equal(t, SBytes(""), EncodeFloat64(0.0))
 }
 
+/*
 func TestBaseStamp64Enc(t *testing.T) {
 	nn := time.Now()
 	buf := EncodeStamp64(nn)
-	fmt.Println(nn)
-	fmt.Println(buf)
+	//fmt.Println(nn)
+	//fmt.Println(buf)
 	//Hexdump(buf, 8)
 }
+*/
+
 
 
 func TestBaseComplexEnc(t *testing.T) {
