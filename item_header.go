@@ -197,7 +197,10 @@ func DecodeKey(keyTypeBits byte, buf []byte, index int) (interface{}, int, error
 }
 
 
+// Quick & dirty header decode where we are expecting only int keys.
+//func EncodeHeader(dataType int, key interface{}, isNull bool, dataLen int) ([]byte, error) {
 
+func DecodeIntKeyHeader()
 
 
 

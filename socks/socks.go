@@ -1,14 +1,14 @@
 package main
 
 import (
-	"github.com/pkg/errors"
-
-
 	"fmt"
 	"log"
-	"net"
-	"time"
 	"math/bits"
+	"net"
+	"reflect"
+	"time"
+
+	"github.com/pkg/errors"
 )
 
 // Note: BMQ framing (outermost frame) vs BMQ-LL (an inner protocol for link-local messages).
@@ -23,10 +23,14 @@ import (
 // I say we do the same in python too. It wont be performant, but we don't really need it to be.
 // And when we do, a little C lib will actually work for managing connections and
 
+//const TIMEOUT = 2 * time.Minute		// prod
+const TIMEOUT = 2 * time.Second			// testing
+const CONNECT_TIMEOUT = 15 * time.Second
+
 func ConnectLoop() {
 	for {
 		fmt.Println("(re)connecting...")
-		conn, cerr := net.DialTimeout("tcp", "127.0.0.1:7777", 5*time.Second)
+		conn, cerr := net.DialTimeout("tcp", "127.0.0.1:7777", CONNECT_TIMEOUT)
 		must(cerr)								// Connection fail is fatal.
 		fmt.Println("Connected")
 
@@ -40,9 +44,6 @@ func ConnectLoop() {
 		fmt.Println("Comms error: ",err)
 	}
 }
-
-//const TIMEOUT = 2 * time.Minute		// prod
-const TIMEOUT = 2 * time.Second			// testing
 
 func ReceiveByte(conn net.Conn) (byte, error) {
 	var err error
@@ -118,7 +119,7 @@ func ReadUvarint(conn net.Conn) (int, error) {
 	var err error
 
 	for {
-		fmt.Println("readUvarint i ",i)
+		// fmt.Println("readUvarint i ",i)
 		byt, err = ReceiveByte(conn)
 		if err != nil {
 			return 0, errors.Wrap(err, "rx byte")
@@ -137,11 +138,14 @@ func ReadUvarint(conn net.Conn) (int, error) {
 	// return 0, errors.New("uvarint > buffer")		// unreachable
 }
 
+var cnt int
 
 
 func CommsLoop(conn net.Conn) error {
 	var err error
 	var cc byte
+	cyc := 0
+	cnt = 0
 
 	for {
 
@@ -152,10 +156,11 @@ func CommsLoop(conn net.Conn) error {
 		}
 
 		if cc == 0x88 {
-			fmt.Println("\ngot ping, continuing")
+			fmt.Println("P")
+			// fmt.Println("\ngot ping, continuing")
 			continue
 		}
-		fmt.Println("\ngot start of message.")
+		// fmt.Println("\ngot start of message.")
 
 		// 0x69 = int-key = BMQ-LL
 		cc,err = Expect(conn, []byte{0x69})
@@ -163,7 +168,7 @@ func CommsLoop(conn net.Conn) error {
 			return errors.Wrap(err, "not BMQ-LL message")
 		}
 
-		fmt.Println("Woo, BMQ-LL message!")
+		// fmt.Println("Woo, BMQ-LL message!")
 		// Data len uvarint is next
 
 		var dataLen int											// 0 by default
@@ -183,10 +188,10 @@ func CommsLoop(conn net.Conn) error {
 			if err = conn.SetReadDeadline(time.Now().Add(TIMEOUT)); err != nil {
 				return errors.Wrap(err, "set timout")
 			}
-			fmt.Println("\ncalling read, nread ",nread,"  buf len ",len(buf))
+			// fmt.Println("\ncalling read, nread ",nread,"  buf len ",len(buf))
 			n,nerr := conn.Read(buf[nread:])
-			fmt.Println("n    = ",n)
-			fmt.Println("nerr = ",nerr)
+			// fmt.Println("n    = ",n)
+			// fmt.Println("nerr = ",nerr)
 			if nerr != nil {
 				return errors.Wrap(nerr, "buffer read")
 			}
@@ -194,19 +199,91 @@ func CommsLoop(conn net.Conn) error {
 				fmt.Println("read 0")
 				break
 			}
-			fmt.Print(Hexdump(buf, dataLen), "\n")
+			//fmt.Print(Hexdump(buf, dataLen), "\n")
 			nread += n
-			fmt.Println("nread now ",nread)
+			// fmt.Println("nread now ",nread)
 		}
-		fmt.Println("Done")
+		fmt.Println("Rx ",len(buf)," bytes successfully")
+		// fmt.Printf("%d",cyc)
+		cyc++
+		if cyc > 9 {
+			cyc = 0
+		}
+		cnt++
 
+		// Currently we only process received BMQ-LL frames.
+		frame := BMQLLFrame{}
+
+		err = FillStructFromB3Buffer(buf, dataLen, &frame)
+		if err != nil {
+			return errors.Wrap(err, "filling bmqll struct")
+		}
+
+		// Pass it to app. (maybe send it out a channel)
+		err = FrameReceived(frame)
+		if err != nil {
+			return errors.Wrap(err, "processing frame")
+		}
 
 	}
-
-
 }
 
+type BMQLLFrame struct {
+	Cmd string `b3.type:"UTF8" b3.tag:"1"`
+	Dat []byte `b3.type:"BYTES" b3.tag:"2"`
+}
 
+func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) error {
+	// for each b3 item in buf -
+	// decode item header, get b3 data type, b3 key/tag, and data (bytes)
+	// (use reflect to) LOOK UP with a loop. locate tag in newFrame struct, (ignore if not found)
+	// ensure buf b3 data type we have, matches struct tag b3 data type (error if not)
+	// do b3 codec lookup on data type, use b3 codec to create go concrete variable
+	// use reflect to insert go concrete variable into struct.
+
+	// Get the struct pointer from the interface{}
+	ptr := reflect.ValueOf(destStructPtr)
+	// must be a pointer, if we call Elem on non-pointer, Elem panics
+	if ptr.Kind() != reflect.Ptr {
+		return errors.New("destStructPtr must be a pointer")
+	}
+	// must be a struct, NumField panics if called on a non-struct
+	destStruct := ptr.Elem()
+	if destStruct.Kind() != reflect.Struct {
+		return errors.New("destStructPtr must be a pointer to a struct")
+	}
+
+	// So now that we have our struct.
+	// Let's test-set a couple fields and leave it there.
+
+	field0Val := destStruct.
+
+
+	// .Field panics if not struct, or if blah is out of range.
+	// Reflect sure panics a lot.
+
+	// we can call Set if we have a relect.Value to set into the struct,
+	// which we will because b3 codec decode universal function is gonna return us an interface{}
+	// Because if we're gonna be generic, we have to be generic on BOTH sides.
+
+
+
+
+	// can only call Elem() on pointers (to get the writeable 'struct')
+	// if you call Elem on a non-pointer it panics.
+	// Actually "It panics if the type's Kind is not Array, Chan, Map, Ptr, or Slice."
+
+	// we have to do a Kind check first.
+
+
+
+	return nil
+}
+
+func FrameReceived(frame BMQLLFrame) error {
+	fmt.Println("Bmq LL frame received! ",frame)
+	return nil
+}
 
 
 
@@ -218,14 +295,23 @@ func must(err error) {
 }
 
 func main() {
+	//defer profile.Start().Stop()
 	fmt.Println("Golang side")
 	if bits.UintSize != 64 {
 		panic("            **** Not in a 64bit mode! ( set GOARCH=amd64 ) ***")
 	}
+
+	go func() {
+		for {
+			fmt.Println("cnt ",cnt)
+			cnt = 0
+			time.Sleep(time.Second)
+		}
+	}()
+
 	ConnectLoop()
 	fmt.Println("Done.")
 }
-
 
 
 /*
