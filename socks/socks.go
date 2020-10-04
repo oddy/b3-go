@@ -234,12 +234,6 @@ type BMQLLFrame struct {
 }
 
 func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) error {
-	// for each b3 item in buf -
-	// decode item header, get b3 data type, b3 key/tag, and data (bytes)
-	// (use reflect to) LOOK UP with a loop. locate tag in newFrame struct, (ignore if not found)
-	// ensure buf b3 data type we have, matches struct tag b3 data type (error if not)
-	// do b3 codec lookup on data type, use b3 codec to create go concrete variable
-	// use reflect to insert go concrete variable into struct.
 
 	// Get the struct pointer from the interface{}
 	ptr := reflect.ValueOf(destStructPtr)
@@ -253,11 +247,19 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 		return errors.New("destStructPtr must be a pointer to a struct")
 	}
 
-	// So now that we have our struct.
-	// Let's test-set a couple fields and leave it there.
+    // for each b3 item in buf -
+	// decode item header, get b3 data type, b3 key/tag, and datalen
 
-	field0Val := destStruct.
+	// (use reflect to) LOOK UP key/tag in struct with a loop. locate tag in dest struct, (ignore if not found)
 
+	// ensure buf b3 data type we have, matches struct tag b3 data type (error if not)
+
+	// do b3 codec lookup on data type, use b3 codec to create go concrete variable from data buf slice
+	// (b3 codec universal function returns us an interface{} so that we can get our reflect.Value for Set() easily)
+	// use .Set to insert go concrete variable into struct.
+
+
+	// ----------- notes ----------
 
 	// .Field panics if not struct, or if blah is out of range.
 	// Reflect sure panics a lot.
@@ -266,16 +268,13 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 	// which we will because b3 codec decode universal function is gonna return us an interface{}
 	// Because if we're gonna be generic, we have to be generic on BOTH sides.
 
-
-
-
 	// can only call Elem() on pointers (to get the writeable 'struct')
 	// if you call Elem on a non-pointer it panics.
 	// Actually "It panics if the type's Kind is not Array, Chan, Map, Ptr, or Slice."
 
 	// we have to do a Kind check first.
 
-
+	// lets make sure we can extract those struct tags too (see playground.go)
 
 	return nil
 }
@@ -284,8 +283,6 @@ func FrameReceived(frame BMQLLFrame) error {
 	fmt.Println("Bmq LL frame received! ",frame)
 	return nil
 }
-
-
 
 
 func must(err error) {
