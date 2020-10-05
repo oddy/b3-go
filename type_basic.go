@@ -6,10 +6,12 @@ import (
 	"time"
 )
 // Method: Encoders assemble [][]byte of []byte, then bytes.Join() them. We take advantage of this often for empty/nonexistant fields etc.
-// ?? Method: Decoders always take the whole buffer, and an index, and return an updated index.
+// Method: Decoders always take the a slice, and do NOT have to return an updated index.
+// Note:   opposite to python, slicing is cheap, so we API using slices instead of a buffer+index.
+//         In this respect, the Go function apis/contract/signatures are cleaner.
 
 // Policy: Encoders MAY return no bytes to signify a Compact Zero Value (optional)
-// Policy: Decoders MUST accept if index==end and return a Zero value (mandatory)
+// Policu: Decoders MUST accept len(buf)==0 and return a Zero value (mandatory)
 // Policy: Favouring simplicity over performance by having the type safety checks here.
 
 func EncodeBool(value bool) []byte {
@@ -23,6 +25,7 @@ func EncodeBool(value bool) []byte {
 
 func EncodeUtf8(value string) []byte {
 	return []byte(value)					// Strings in go are already utf8 byte arrays, score!
+	// note that this is a copy
 }
 
 // "Converting between int64 and uint64 doesn't change the sign bit, only the way it's interpreted."

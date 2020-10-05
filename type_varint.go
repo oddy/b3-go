@@ -47,16 +47,21 @@ func EncodeSvarint(x int)  []byte {
 // ... its when i goes from 8 to 9.
 
 
-func DecodeUvarint(buf []byte, index int) (int, int, error) { // returns output,index,error
+// Policy: NEW: DecodeUvarint and friends do NOT take an incoming index. top-down slices for us, so we always
+//         start at the start of the slice we are given.
+// Policy: NEW: we DO however, have to return the number of bytes consumed.
+// Note: the number of bytes consumed is NOT an index!
+
+
+func DecodeUvarint(buf []byte) (int, int, error) { // returns output,bytes-consumed,error
 	var result int
 	var shift int
-	buf2 := buf[index:]
-	for i, byt := range buf2 {
+	for i, byt := range buf {
 		if byt < 0x80 { // MSbit clear, final byte.
 			if i >= 9 {
 				return 0, 0, fmt.Errorf("uvarint > int64")
 			}
-			return result | int(byt)<<shift, index + i + 1, nil // Ok
+			return result | int(byt)<<shift, i + 1, nil // Ok
 		}
 		result |= int(byt&0x7f) << shift
 		shift += 7
@@ -64,8 +69,8 @@ func DecodeUvarint(buf []byte, index int) (int, int, error) { // returns output,
 	return 0, 0, fmt.Errorf("uvarint > buffer")
 }
 
-func DecodeSvarint(buf []byte, index int) (int, int, error) { // returns output,index,error
-	ux, resIndex, err := DecodeUvarint(buf, index)
+func DecodeSvarint(buf []byte) (int, int, error) { // returns output,bytes-consumed,error
+	ux, bytesConsumed, err := DecodeUvarint(buf)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -74,7 +79,7 @@ func DecodeSvarint(buf []byte, index int) (int, int, error) { // returns output,
 	if ux&1 != 0 {
 		result = ^result
 	}
-	return result, resIndex, nil
+	return result, bytesConsumed, nil
 }
 
 

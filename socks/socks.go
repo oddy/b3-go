@@ -247,6 +247,20 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 		return errors.New("destStructPtr must be a pointer to a struct")
 	}
 
+
+
+
+
+	// ==============================================================================================
+	// We're passing slices. decode_header is special, it gets the [x:] rest-of-buf,
+	// everything else gets [x:y] because sizes are KNOWN for everything else.
+	// ==============================================================================================
+
+	// Q: if we decode a header and there is an error, we cannot proceed yes?
+	// A: correct because we can't be certain the dataLen in the header is legit because the header failed to decode.
+
+
+
     // for each b3 item in buf -
 	// decode item header, get b3 data type, b3 key/tag, and datalen
 
@@ -278,6 +292,20 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 
 	return nil
 }
+
+
+
+// in go, strings are already utf8 []bytes really.
+// go only utf8-decodes in 2 places 1) for i,r := range s (yielding runes), 2) casting []rune(s).
+// In those instances invalide utf8 is replaces with U+FFFD (65533 utf8.RuneError) and the ops *do not crash*.
+// https://stackoverflow.com/questions/34861479/how-to-detect-when-bytes-cant-be-converted-to-string-in-go
+func TmpB3DecodeUTF8(buf []byte) (interface{}, error) {
+	return string(buf),nil
+}
+func TmpB3DecodeBytes(buf []byte) (interface{}, error) {
+	return buf,nil											// a no-op but interface{} is returned.
+}
+
 
 func FrameReceived(frame BMQLLFrame) error {
 	fmt.Println("Bmq LL frame received! ",frame)

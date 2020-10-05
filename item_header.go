@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	_ "go/types"
+
+	"github.com/pkg/errors"
 )
 
 /*
@@ -40,26 +42,31 @@ import (
 
 // Policy: Screw it, use int everywhere we can. "int" is the default type and it will mean a lot less casting.
 
+type ItemHeader struct {
+	DataType int
+	Key interface{}
+	IsNull bool
+	DataLen int
+}
 
-func EncodeHeader(dataType int, key interface{}, isNull bool, dataLen int) ([]byte, error) {
+func EncodeHeader(hdr ItemHeader) ([]byte, error) {
 	var extDataTypeBytes []byte
 	var lenBytes []byte
 	var cbyte byte
 
 	// --- Null & data len ---
-	if isNull {
+	if hdr.IsNull {
 		cbyte |= 0x80 								// data value is null. Note: null supercedes has-data
 	} else {
-		if dataLen > 0 {
+		if hdr.DataLen > 0 {
 			cbyte |= 0x40							// has data flag on
-			lenBytes = append(lenBytes, EncodeUvarint(dataLen)...)
+			lenBytes = append(lenBytes, EncodeUvarint(hdr.DataLen)...)
 		}
 	}
 	// fmt.Printf("cbyte is %02x\n",cbyte)
 
-
 	// --- Key type ---
-	keyTypeBits, keyBytes, err := EncodeKey(key)
+	keyTypeBits, keyBytes, err := EncodeKey(hdr.Key)
 	if err != nil {
 		return []byte{}, err
 	}
@@ -68,15 +75,15 @@ func EncodeHeader(dataType int, key interface{}, isNull bool, dataLen int) ([]by
 	// fmt.Printf("cbyte is %02x\n",cbyte)
 
 	// --- Data type ---
-	if dataType < 0 {							// Sanity S
+	if hdr.DataType < 0 {							// Sanity S
 		return []byte{}, fmt.Errorf("-ve data types not permitted")
 	}
 
-	if dataType > 14 { 							// 'extended' data types 15 and up are a seperate uvarint
-		extDataTypeBytes = append(extDataTypeBytes, EncodeUvarint(dataType)...)
+	if hdr.DataType > 14 { 							// 'extended' data types 15 and up are a seperate uvarint
+		extDataTypeBytes = append(extDataTypeBytes, EncodeUvarint(hdr.DataType)...)
 		cbyte |= 0x0f 							// control byte data_typeck bits set to all 1's to signify this
 	} else {
-		cbyte |= byte(dataType) & 0x0f
+		cbyte |= byte(hdr.DataType) & 0x0f
 	}
 
 	// --- Build header ---
@@ -155,53 +162,78 @@ func EncodeKey(ikey interface{}) (byte, []byte, error) {
 // You can see in DecodeUvarint
 
 
-func DecodeKey(keyTypeBits byte, buf []byte, index int) (interface{}, int, error) {
-	if keyTypeBits == 0x00 {
-		return nil, index, nil
+
+
+
+
+
+
+
+
+// ++++ new +++++++
+
+	// ==============================================================================================
+	// We're passing slices. decode_header is special, it gets the [x:] rest-of-buf,
+	// everything else gets [x:y] because sizes are KNOWN for everything else.
+	// ==============================================================================================
+
+// decode_header DOES need to return number of bytes consumed, but the size-known functions dont.
+// DECIDED.
+
+// Q: Do errors return 0 bytes consumed?
+// A: yes. bytesConsumed is invalid if there is an error. Return 0 for it and expect it not to be used.
+
+func DecodeKey(keyTypeBits byte, buf []byte) (interface{}, int, error) {  // Return: key-value, bytes-consumed, error
+	if keyTypeBits == 0x00 {							// no key
+		return nil, 0, nil
 	}
 
-	if keyTypeBits == 0x10 {
-		return DecodeUvarint(buf, index)					// Note also would return error
+	if keyTypeBits == 0x10 {							// (u)int key
+		return DecodeUvarint(buf)		// Note also would return error
 	}
 
-	if keyTypeBits == 0x20 {
-		klen, nextIndex, err := DecodeUvarint(buf, index)
+	if keyTypeBits == 0x20 || keyTypeBits == 0x30 {		// string or bytes key.
+		klen, nLenBytes, err := DecodeUvarint(buf)		// nLenBytes = how many bytes the uvarint len itself is.
 		if err != nil {
-			return nil, index, err
+			return nil, 0, errors.Wrap(err,"decodekey decode len uvarint")  // bytesConsumed should be 0 if error.
 		}
 
 		// result returned from DecodeUvarint will never be negative.
-		// index returned from DecodeUvarint will never be less than index passed in.
 
-		// Assuming the index
-
-
-		end := nextIndex + klen
+		end := nLenBytes + klen
 		if end >= len(buf) {
-			return nil, index, fmt.Errorf("key size > buffer len")
+			return nil, 0, errors.New("key size > buffer len")
 		}
-		keyStr := string(buf[nextIndex : nextIndex + klen])
-		return keyStr, nextIndex+klen, nil
+
+		keyBytes := buf[nLenBytes : end]
+
+		if keyTypeBits == 0x30 {
+			return keyBytes, end, nil
+		} else {
+			return string(keyBytes), end, nil
+		}
+
 	}
 
-	if keyTypeBits == 0x30 {
-		klen, nextIndex, err := DecodeUvarint(buf, index)
-		if err != nil {
-			return nil, index, err
-		}
-		keyBytes := buf[nextIndex : nextIndex + klen]
-		return keyBytes, nextIndex+klen, nil
-	}
-
-	return nil, index, fmt.Errorf("invalid key type in control byte")
+	return nil, 0, fmt.Errorf("invalid key type in control byte")
 }
 
 
-// Quick & dirty header decode where we are expecting only int keys.
-//func EncodeHeader(dataType int, key interface{}, isNull bool, dataLen int) ([]byte, error) {
+// 							   returns: ItemHeader struct, bytesConsumed int, error
 
-func DecodeIntKeyHeader()
+func DecodeHeader(buf []byte) (ItemHeader, int, error) {
+	hdr := ItemHeader{}
+	// Must be at least 1 byte
+	if len(buf) < 1 {
+		return hdr,0,errors.New("decodeheader buf empty")
+	}
 
+	// finish this
+
+
+
+
+}
 
 
 
