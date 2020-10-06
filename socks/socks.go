@@ -6,6 +6,7 @@ import (
 	"math/bits"
 	"net"
 	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
@@ -233,11 +234,16 @@ func CommsLoop(conn net.Conn) error {
 type BMQLLFrame struct {
 	Cmd string `b3.type:"UTF8" b3.tag:"1"`
 	Dat []byte `b3.type:"BYTES" b3.tag:"2"`
+	Unu []byte
+	Vee int `b3.type:"UVARINT" b3.tag:"3"`
 }
 
-func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) error {
-	//var bytesUsed int
+// fields with no b3 struct tags are ignored.
+// fields not present in the incoming data are ignored (will be 0 or whatever the incoming struct already has)
 
+
+func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) error {
+	var ok bool
 
 	// Get the struct pointer from the interface{}
 	ptr := reflect.ValueOf(destStructPtr)
@@ -245,11 +251,15 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 	if ptr.Kind() != reflect.Ptr {
 		return errors.New("destStructPtr must be a pointer")
 	}
+
 	// must be a struct, NumField panics if called on a non-struct
 	destStruct := ptr.Elem()
 	if destStruct.Kind() != reflect.Struct {
 		return errors.New("destStructPtr must be a pointer to a struct")
 	}
+
+	// we need this to get at the b3 struct tags.
+	destStructType := reflect.TypeOf(destStructPtr).Elem()
 
 	index := 0
 	for index < len(buf) {
@@ -259,10 +269,18 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 		}
 		index += bytesUsed
 		fmt.Println("filllstruct got header ",hdr)
+		// [hdr]   DataType, Key(tag), IsNull, DataLen
+
+		// Policy:  key type must be int.
+		// Todo:    support for string and maybe bytes key types.
+		tag,kok := hdr.Key.(int)
+		if !kok {
+			return errors.New("only int keys supported")
+		}
 
 		// use data type to get b3 decoder.
-		DecodeFunc,ok := TMP_B3_DECODE_FUNCS[hdr.DataType]
-		if !ok {
+		DecodeFunc,fok := TMP_B3_DECODE_FUNCS[hdr.DataType]
+		if !fok {
 			return errors.New("no decoder found for data type")
 		}
 
@@ -278,27 +296,74 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 		if err != nil {
 			return errors.Wrap(err, "b3 type decoder fail")
 		}
-
-		fmt.Println("decoded value ",decodedValue)
-
-
-
-		// DataType Key(tag) IsNull DataLen
-
-
-
-
-
-
-
-
-
-
-
 		index += hdr.DataLen
 
-	}
+		fmt.Println("key/tag number ",tag)
+		fmt.Println("decoded value  ",decodedValue)
 
+		// with the struct we're given, find the field using struct tags b3.tag
+
+		// Search struct for the matching field.
+		fieldFound := false
+		fieldNum := 0
+		fieldB3TypeInt := 0			// not a valid type.
+		for ; fieldNum < destStruct.NumField() ; fieldNum++ {
+
+			// Get struct tags b3.tag 'number'
+			tfield := destStructType.Field(fieldNum)
+			fieldB3Tag := tfield.Tag.Get("b3.tag")
+			if fieldB3Tag == "" {
+				continue								// no b3.tag struct tag, skip struct field.
+			}
+			fieldB3TagNum,fberr := strconv.Atoi(fieldB3Tag)
+			if fberr != nil {
+				return errors.Wrap(fberr, "struct b3.tag is not a number")
+				//continue								// cant convert struct tag to int, skip struct field (?)
+			}
+			if fieldB3TagNum == tag {		// found it!
+
+				// extract the b3.type struct tag too.
+				fieldB3Type := tfield.Tag.Get("b3.type")
+				if fieldB3Type == "" {
+					return errors.New("struct b3.type is missing")
+				}
+				fieldB3TypeInt, ok = B3_TYPE_NAMES_TO_NUMBERS[fieldB3Type]
+				if !ok {
+					return errors.New("struct b3.type name not found in b3 types")
+				}
+				fieldFound = true
+				break
+			}
+		}
+		if !fieldFound {	// wanted b3 tag not found in struct, ignore
+			fmt.Println("b3 tag not found in struct tags, ignoring")
+			continue
+		}
+
+		// fieldNum now has the number of the struct field.
+		// ensure the field is valid and settable.
+		fieldVal := destStruct.Field(fieldNum)
+		if !fieldVal.IsValid() {
+			return errors.New("struct field is not valid")
+		}
+		if !fieldVal.CanSet() {
+			return errors.New("struct field is not settable")
+		}
+
+		// ensure the b3 types match!
+		if hdr.DataType != fieldB3TypeInt {
+			return errors.New("struct field b3 type mismatch vs incoming data type")
+		}
+
+		// ---- Actually set it, woo! ----
+		refVal := reflect.ValueOf(decodedValue)
+		fieldVal.Set(refVal)
+
+		fmt.Println("struct field number ",fieldNum," name ",destStructType.Field(fieldNum).Name, " successfully set val to ",decodedValue)
+
+	}
+	return nil
+}
 
 
 	// ==============================================================================================
@@ -340,9 +405,6 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 
 	// lets make sure we can extract those struct tags too (see playground.go)
 
-	return nil
-}
-
 
 
 // ===================== Temporary B3 basic decoders ===========================
@@ -358,21 +420,41 @@ func TmpB3DecodeBytes(buf []byte) (interface{}, error) {
 	return buf,nil											// a no-op but interface{} is returned.
 }
 
+func TmpB3DecodeUvarint(buf []byte) (interface{}, error) {
+	n, _, err := b3.DecodeUvarint(buf)						// we dont need bytesUsed because we're sized already.S
+	return n,err
+}
+
 type B3DecodeFunc func([]byte) (interface{}, error)
 
-const B3_BYTES = 3
-const B3_UTF8 = 4
+const B3_BYTES	 = 3
+const B3_UTF8	 = 4
+const B3_UVARINT = 7
 
 var TMP_B3_DECODE_FUNCS = map[int]B3DecodeFunc{
-	B3_BYTES: TmpB3DecodeBytes,
-	B3_UTF8: TmpB3DecodeUTF8,
+	B3_BYTES:	TmpB3DecodeBytes,
+	B3_UTF8:	TmpB3DecodeUTF8,
+	B3_UVARINT:	TmpB3DecodeUvarint,
+}
+
+var B3_TYPE_NAMES_TO_NUMBERS = map[string]int {
+	"BYTES": 3,
+	"UTF8": 4,
+	"UVARINT":7,
 }
 
 // ===================== Temporary B3 basic decoders ===========================
 
 
 func FrameReceived(frame BMQLLFrame) error {
-	fmt.Println("Bmq LL frame received! ",frame)
+
+	fmt.Println("\nBmq LL frame received! ",frame)
+	fmt.Println("frame cmd ",frame.Cmd)
+	fmt.Println("frame dat ",frame.Dat)
+	fmt.Println("frame unu ",frame.Unu)
+	fmt.Println("frame vee ",frame.Vee)
+	fmt.Println()
+
 	return nil
 }
 
