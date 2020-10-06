@@ -37,7 +37,7 @@ func roger(qq interface{}) {
 		tfield := typ.Field(i)
 		fmt.Println(" tfield ",tfield)
 		fmt.Println(" tfield tag ",tfield.Tag)
-		x,ok := tfield.Tag.Lookup("b3.type")
+		var x, ok = tfield.Tag.Lookup("b3.type")
 		fmt.Println(" tfield tag ok ",ok)
 		fmt.Println(" tfield tag x  ",x)
 		fmt.Println(" tfield tag get b3 type ",tfield.Tag.Get("b3.type"))
@@ -47,7 +47,7 @@ func roger(qq interface{}) {
 	}
 }
 
-func main() {
+func _main() {
 	x := argh{1111,2222}
 	v := 8
 

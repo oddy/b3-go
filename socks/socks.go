@@ -10,7 +10,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"b3"
+	"b3-go/b3"			// i think the module is called b3-go and the package is called b3
 )
 
 // Note: BMQ framing (outermost frame) vs BMQ-LL (an inner protocol for link-local messages).
@@ -26,7 +26,7 @@ import (
 // And when we do, a little C lib will actually work for managing connections and
 
 //const TIMEOUT = 2 * time.Minute		// prod
-const TIMEOUT = 2 * time.Second			// testing
+const TIMEOUT = 6 * time.Second			// testing
 const CONNECT_TIMEOUT = 15 * time.Second
 
 func ConnectLoop() {
@@ -218,7 +218,7 @@ func CommsLoop(conn net.Conn) error {
 
 		err = FillStructFromB3Buffer(buf, dataLen, &frame)
 		if err != nil {
-			return errors.Wrap(err, "filling bmqll struct")
+			return errors.Wrap(err, "filling BMQ-LL struct")
 		}
 
 		// Pass it to app. (maybe send it out a channel)
@@ -253,13 +253,49 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 
 	index := 0
 	for index < len(buf) {
-		hdr, bytesUsed, err := DecodeHeader(buf[index:])
+		hdr, bytesUsed, err := b3.DecodeHeader(buf[index:])
 		if err != nil {
 			return errors.Wrap(err, "fillstruct decode header fail")
 		}
 		index += bytesUsed
+		fmt.Println("filllstruct got header ",hdr)
+
+		// use data type to get b3 decoder.
+		DecodeFunc,ok := TMP_B3_DECODE_FUNCS[hdr.DataType]
+		if !ok {
+			return errors.New("no decoder found for data type")
+		}
+
+		// b3 decode item data to interface value.
+		// Policy:  incoming b3 nulls -> go zero-values.
+		//          otherwise "cannot use nil as type int in field value"
+		var decodedValue interface{}
+		if hdr.IsNull {
+			decodedValue,err = DecodeFunc([]byte{})		// []byte{} = empty slice,  []byte = nil slice. we want empty not nil.
+		} else {										// i dont think we can pass []byte by itself anyway, wont compile
+			decodedValue,err = DecodeFunc(buf[index:index+hdr.DataLen])
+		}
+		if err != nil {
+			return errors.Wrap(err, "b3 type decoder fail")
+		}
+
+		fmt.Println("decoded value ",decodedValue)
 
 
+
+		// DataType Key(tag) IsNull DataLen
+
+
+
+
+
+
+
+
+
+
+
+		index += hdr.DataLen
 
 	}
 
@@ -309,6 +345,8 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 
 
 
+// ===================== Temporary B3 basic decoders ===========================
+
 // in go, strings are already utf8 []bytes really.
 // go only utf8-decodes in 2 places 1) for i,r := range s (yielding runes), 2) casting []rune(s).
 // In those instances invalide utf8 is replaces with U+FFFD (65533 utf8.RuneError) and the ops *do not crash*.
@@ -319,6 +357,18 @@ func TmpB3DecodeUTF8(buf []byte) (interface{}, error) {
 func TmpB3DecodeBytes(buf []byte) (interface{}, error) {
 	return buf,nil											// a no-op but interface{} is returned.
 }
+
+type B3DecodeFunc func([]byte) (interface{}, error)
+
+const B3_BYTES = 3
+const B3_UTF8 = 4
+
+var TMP_B3_DECODE_FUNCS = map[int]B3DecodeFunc{
+	B3_BYTES: TmpB3DecodeBytes,
+	B3_UTF8: TmpB3DecodeUTF8,
+}
+
+// ===================== Temporary B3 basic decoders ===========================
 
 
 func FrameReceived(frame BMQLLFrame) error {

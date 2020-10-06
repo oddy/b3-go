@@ -220,6 +220,10 @@ func DecodeHeader(buf []byte) (ItemHeader, int, error) {
 	var index, bytesUsed int
 	var err error
 
+	fmt.Println("DecodeHeader called")
+	fmt.Print(Hexdump(buf, len(buf)))
+	fmt.Println(" ")
+
 	hdr := ItemHeader{}
 	// Must be at least 1 byte
 	if len(buf) < 1 {
@@ -262,6 +266,8 @@ func DecodeHeader(buf []byte) (ItemHeader, int, error) {
 		}
 		index += bytesUsed
 	}
+
+	fmt.Println("DecodeHeader success, returning ",hdr)
 
 	return hdr,index,nil
 }
