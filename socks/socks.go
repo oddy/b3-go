@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+
+	"b3"
 )
 
 // Note: BMQ framing (outermost frame) vs BMQ-LL (an inner protocol for link-local messages).

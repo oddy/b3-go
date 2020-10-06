@@ -51,7 +51,7 @@ func TestUvarintDecode(t *testing.T) {
 	}
 	// idiomatic method is to assert each return seperately.
 	for _, test := range tests {
-		val, index, err := DecodeUvarint(test.input, 0)
+		val, index, err := DecodeUvarint(test.input)
 		assert.Equal(t, err, test.err) // would use assert.Nil() if simpler.
 		assert.Equal(t, index, test.index)
 		assert.Equal(t, val, test.val)
@@ -90,7 +90,7 @@ func TestSvarintDecode(t *testing.T) {
 	}
 	// idiomatic method is to assert each return seperately.
 	for _, test := range tests {
-		val, index, err := DecodeSvarint(test.input, 0)
+		val, index, err := DecodeSvarint(test.input)
 		assert.Equal(t, err, test.err) // would use assert.Nil() if simpler.
 		assert.Equal(t, index, test.index)
 		assert.Equal(t, val, test.val)

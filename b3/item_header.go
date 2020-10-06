@@ -2,7 +2,6 @@ package b3
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	_ "go/types"
 
@@ -108,11 +107,7 @@ func EncodeHeader(hdr ItemHeader) ([]byte, error) {
 
 func EncodeKey(ikey interface{}) (byte, []byte, error) {
 
-	_ = json.Encoder()
-
 	switch key := ikey.(type) {
-
-
 
 	case nil: // also nil slice and/or empty slice?		// does this work?
 		return 0x00, []byte{}, nil
@@ -224,7 +219,6 @@ func DecodeKey(keyTypeBits byte, buf []byte) (interface{}, int, error) {  // Ret
 func DecodeHeader(buf []byte) (ItemHeader, int, error) {
 	var index, bytesUsed int
 	var err error
-	var key interface{}
 
 	hdr := ItemHeader{}
 	// Must be at least 1 byte
