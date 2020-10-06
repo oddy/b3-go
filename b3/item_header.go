@@ -46,7 +46,7 @@ type ItemHeader struct {
 	DataType int
 	Key interface{}
 	IsNull bool
-	DataLen int
+	DataLen int		// 0 = not hasData on encode side, len forced 0 if hasData FALSE on decode side.
 }
 
 func EncodeHeader(hdr ItemHeader) ([]byte, error) {
@@ -215,31 +215,62 @@ func DecodeKey(keyTypeBits byte, buf []byte) (interface{}, int, error) {  // Ret
 
 	}
 
-	return nil, 0, fmt.Errorf("invalid key type in control byte")
+	return nil, 0, errors.New("invalid key type in control byte")
 }
 
 
-// 							   returns: ItemHeader struct, bytesConsumed int, error
+// 							   returns: ItemHeader struct, bytesUsed int, error
 
 func DecodeHeader(buf []byte) (ItemHeader, int, error) {
+	var index, bytesUsed int
+	var err error
+	var key interface{}
+
 	hdr := ItemHeader{}
 	// Must be at least 1 byte
 	if len(buf) < 1 {
 		return hdr,0,errors.New("decodeheader buf empty")
 	}
+	cbyte := buf[0]				// control byte
+	index += 1
 
-	// finish this
+	// --- data type ---
+	hdr.DataType = int(cbyte & 0x0f)
+	if hdr.DataType == 15 {
+		hdr.DataType, bytesUsed, err = DecodeUvarint(buf[index:])
+		if err != nil {
+			return hdr,0,errors.Wrap(err,"item header extended datatype decode failed")
+		}
+		index += bytesUsed
+	}
 
+	// --- Key ---
+	keyTypeBits := cbyte & 0x30
+	hdr.Key, bytesUsed, err = DecodeKey(keyTypeBits, buf[index:])
+	if err != nil {
+		return hdr,0,errors.Wrap(err,"item header decode key fail")
+	}
+	index += bytesUsed
 
+	// --- Null check ---
+	hdr.IsNull  = (cbyte & 0x80) == 0x80
+	hasData    := (cbyte & 0x40) == 0x40
+	if hdr.IsNull && hasData {
+		return hdr,0,errors.New("item header invalid state - is_null and has_data both ON")
+	}
 
+	// --- Data len ---
+	hdr.DataLen = 0
+	if hasData {
+		hdr.DataLen, bytesUsed, err = DecodeUvarint(buf[index:])
+		if err != nil {
+			return hdr,0,errors.Wrap(err, "item header decode data len fail")
+		}
+		index += bytesUsed
+	}
 
+	return hdr,index,nil
 }
-
-
-
-
-
-
 
 
 // Remember reallocations are also copies.

@@ -234,6 +234,8 @@ type BMQLLFrame struct {
 }
 
 func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) error {
+	//var bytesUsed int
+
 
 	// Get the struct pointer from the interface{}
 	ptr := reflect.ValueOf(destStructPtr)
@@ -247,7 +249,17 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 		return errors.New("destStructPtr must be a pointer to a struct")
 	}
 
+	index := 0
+	for index < len(buf) {
+		hdr, bytesUsed, err := DecodeHeader(buf[index:])
+		if err != nil {
+			return errors.Wrap(err, "fillstruct decode header fail")
+		}
+		index += bytesUsed
 
+
+
+	}
 
 
 
