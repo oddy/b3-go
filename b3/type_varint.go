@@ -5,9 +5,6 @@ import (
 )
 
 
-// Policy: using uint64 for all numbers. (max interop on 32bit even tho slower).
-//         possibly revisit this. If 32bit performance ends up being a thing (if 32bit ends up being a thing).
-
 // ===== Encoding =========
 
 // Policy: Not enough buffer isn't an error because we're append() ing

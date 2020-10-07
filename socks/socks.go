@@ -6,12 +6,13 @@ import (
 	"math/bits"
 	"net"
 	"reflect"
+	"sort"
 	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
 
-	"b3-go/b3"			// i think the module is called b3-go and the package is called b3
+	"b3-go/b3" // i think the module is called b3-go and the package is called b3
 )
 
 // Note: BMQ framing (outermost frame) vs BMQ-LL (an inner protocol for link-local messages).
@@ -279,7 +280,7 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 		}
 
 		// use data type to get b3 decoder.
-		DecodeFunc,fok := TMP_B3_DECODE_FUNCS[hdr.DataType]
+		DecodeFunc,fok := b3.B3_DECODE_FUNCS[hdr.DataType]
 		if !fok {
 			return errors.New("no decoder found for data type")
 		}
@@ -327,7 +328,7 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 				if fieldB3Type == "" {
 					return errors.New("struct b3.type is missing")
 				}
-				fieldB3TypeInt, ok = B3_TYPE_NAMES_TO_NUMBERS[fieldB3Type]
+				fieldB3TypeInt, ok = b3.B3_TYPE_NAMES_TO_NUMBERS[fieldB3Type]
 				if !ok {
 					return errors.New("struct b3.type name not found in b3 types")
 				}
@@ -336,7 +337,7 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 			}
 		}
 		if !fieldFound {	// wanted b3 tag not found in struct, ignore
-			fmt.Println("b3 tag not found in struct tags, ignoring")
+			fmt.Println("b3 tag not found in struct tags, ignoring ",hdr.Key)
 			continue
 		}
 
@@ -363,6 +364,154 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 
 	}
 	return nil
+}
+
+
+type SpudStruct struct {
+	Aa string `b3.type:"UTF8" b3.tag:"2"`
+	Bb []byte `b3.type:"BYTES" b3.tag:"1"`
+	Cc int `b3.type:"UVARINT" b3.tag:"3"`
+}
+
+
+func main() {
+	fmt.Println("Golang side")
+	if bits.UintSize != 64 {
+		panic("            **** Not in a 64bit mode! ( set GOARCH=amd64 ) ***")
+	}
+
+	src := SpudStruct{Aa: "fred2", Bb: []byte("\x01\x02\x03")}
+
+	buf, err := StructToBuf(src)
+
+	if err != nil {
+		fmt.Println("StructToBuf error: ", err)
+	} else {
+		fmt.Println("StructToBuf success: ")
+		fmt.Println(Hexdump(buf, len(buf)))
+	}
+}
+
+func StructToBuf(srcStructIf interface{}) ([]byte, error) {
+	// ensure srcStruct is actually a struct
+	srcStruct := reflect.ValueOf(srcStructIf)
+	if srcStruct.Kind() != reflect.Struct {
+		return nil,errors.New("input must be a struct")
+	}
+	// we need this to get at the b3 struct tags.
+	srcStructType := reflect.TypeOf(srcStructIf)
+
+	fmt.Println("ok got struct")
+	fmt.Println(srcStruct)
+	fmt.Println(srcStructType)
+
+	// go through the struct fields, encode the values and keys, make a bunch of item buffers
+	// put the item buffers into a map
+
+	itemHdrBufs := make(map[int][]byte)			// keyed by b3 tag number
+	itemValBufs := make(map[int][]byte)			// keyed by b3 tag number
+	itemKeys := make([]int, 0, 10)				// to be sorted
+
+	for fieldNum := 0 ; fieldNum < srcStruct.NumField() ; fieldNum++ {
+		// Get struct tags b3.tag 'number'
+		tfield := srcStructType.Field(fieldNum)
+		fieldB3Tag := tfield.Tag.Get("b3.tag")
+		if fieldB3Tag == "" {
+			continue								// no b3.tag struct tag, skip struct field.
+		}
+		// turn into actual number
+		fieldB3TagNum,fberr := strconv.Atoi(fieldB3Tag)
+		if fberr != nil {
+			return nil, errors.Wrap(fberr, "struct b3.tag is not a number")
+		}
+		// get b3.type name
+		fieldB3TypeName := tfield.Tag.Get("b3.type")
+		if fieldB3TypeName == "" {
+			return nil, errors.New("struct b3.type is invalid")
+		}
+		// turn into type number
+		fieldB3TypeInt, ok := b3.B3_TYPE_NAMES_TO_NUMBERS[fieldB3TypeName]
+		if !ok {
+			return nil, errors.New("struct b3.type name not found in b3 types")
+		}
+
+		// so fieldB3TagNum is the key
+		// now encode the value
+
+		// we get the value from the struct as a reflect.Value
+		fieldVal := srcStruct.Field(fieldNum)
+		fmt.Println(" field ",fieldNum," val ",fieldVal)
+		fmt.Printf(" field val   is a %T\n", fieldVal)
+
+		// Turn the value into an interface value for feeding to the decoders
+		fieldIfVal := fieldVal.Interface()	// The encoder functions take interface{} and type check themselves.
+		fmt.Printf(" field ifVal is a %T\n", fieldIfVal)
+
+		// Select encoder based on struct tag b3.type number.
+		// (The encoder funcs then type-assert the value to ensure it's the right concrete type.)
+
+		// use data type to get b3 encoder.
+		EncodeFunc,fok := b3.B3_ENCODE_FUNCS[fieldB3TypeInt]
+		if !fok {
+			return nil,errors.New("no encoder found for b3.type")
+		}
+
+		// Feed the value to the b3 decoders
+		valBuf,err := EncodeFunc(fieldIfVal)
+		if err != nil {
+			return nil, errors.Wrap(err, "data value encode fail")
+		}
+
+		// Make b3 item header for value
+		itmHdr := b3.ItemHeader{DataType: fieldB3TypeInt, Key: fieldB3TagNum, IsNull: false, DataLen: len(valBuf)}
+
+		hdrBuf,herr := b3.EncodeHeader(itmHdr)
+		if herr != nil {
+			return nil, errors.Wrap(err, "b3 item header encode fail")
+		}
+
+		// Stash item hdr & value bytes in map by key/tag number
+		itemHdrBufs[fieldB3TagNum] = hdrBuf
+		itemValBufs[fieldB3TagNum] = valBuf
+		// Stash the key numbers in a slice so we can sort them
+		itemKeys = append(itemKeys, fieldB3TagNum)
+
+	}
+
+	if len(itemValBufs) == 0 {
+		return nil, errors.New("no struct fields were successfully encoded")
+	}
+
+	fmt.Println("item header bufs ",itemHdrBufs)
+	fmt.Println("item val bufs    ",itemValBufs)
+
+	// sort the itemBufs keys
+	fmt.Println("keys before sort ",itemKeys)
+	sort.Ints(itemKeys)
+	fmt.Println("keys after sort  ",itemKeys)
+
+	// Then range through the keys in sorted order and just append the itemBufs into a superbuf and return that
+	outBuf := make([]byte,0) //, 0, 64)			// try and keep it on the stack for small messages (?)
+	for _,kn := range itemKeys {
+		fmt.Println("kn ",kn)
+		outBuf = append(outBuf, itemHdrBufs[kn]...)
+		fmt.Print(Hexdump(outBuf, len(outBuf)))
+		fmt.Println()
+		outBuf = append(outBuf, itemValBufs[kn]...)
+		fmt.Print(Hexdump(outBuf, len(outBuf)))
+		fmt.Println()
+	}
+
+	fmt.Println("Final output buf, len = ",len(outBuf))
+	fmt.Print(Hexdump(outBuf, len(outBuf)))
+	fmt.Println()
+
+	return outBuf,nil
+}
+
+func blah(in interface{}) {
+	fmt.Println("made it to blah, in ",in)
+	fmt.Printf("in is a %T\n", in)
 }
 
 
@@ -407,43 +556,6 @@ func FillStructFromB3Buffer(buf []byte, dataLen int, destStructPtr interface{}) 
 
 
 
-// ===================== Temporary B3 basic decoders ===========================
-
-// in go, strings are already utf8 []bytes really.
-// go only utf8-decodes in 2 places 1) for i,r := range s (yielding runes), 2) casting []rune(s).
-// In those instances invalide utf8 is replaces with U+FFFD (65533 utf8.RuneError) and the ops *do not crash*.
-// https://stackoverflow.com/questions/34861479/how-to-detect-when-bytes-cant-be-converted-to-string-in-go
-func TmpB3DecodeUTF8(buf []byte) (interface{}, error) {
-	return string(buf),nil
-}
-func TmpB3DecodeBytes(buf []byte) (interface{}, error) {
-	return buf,nil											// a no-op but interface{} is returned.
-}
-
-func TmpB3DecodeUvarint(buf []byte) (interface{}, error) {
-	n, _, err := b3.DecodeUvarint(buf)						// we dont need bytesUsed because we're sized already.S
-	return n,err
-}
-
-type B3DecodeFunc func([]byte) (interface{}, error)
-
-const B3_BYTES	 = 3
-const B3_UTF8	 = 4
-const B3_UVARINT = 7
-
-var TMP_B3_DECODE_FUNCS = map[int]B3DecodeFunc{
-	B3_BYTES:	TmpB3DecodeBytes,
-	B3_UTF8:	TmpB3DecodeUTF8,
-	B3_UVARINT:	TmpB3DecodeUvarint,
-}
-
-var B3_TYPE_NAMES_TO_NUMBERS = map[string]int {
-	"BYTES": 3,
-	"UTF8": 4,
-	"UVARINT":7,
-}
-
-// ===================== Temporary B3 basic decoders ===========================
 
 
 func FrameReceived(frame BMQLLFrame) error {
@@ -465,7 +577,7 @@ func must(err error) {
 	}
 }
 
-func main() {
+func _rx_main() {
 	//defer profile.Start().Stop()
 	fmt.Println("Golang side")
 	if bits.UintSize != 64 {
