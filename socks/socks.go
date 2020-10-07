@@ -224,10 +224,30 @@ func CommsLoop(conn net.Conn) error {
 		}
 
 		// Pass it to app. (maybe send it out a channel)
-		err = FrameReceived(frame)
-		if err != nil {
-			return errors.Wrap(err, "processing frame")
+		// err = FrameReceived(frame)
+		// if err != nil {
+		// 	return errors.Wrap(err, "processing frame")
+		// }
+
+		fmt.Println("incoming Vee ",frame.Vee)
+		reply := BMQLLFrame{Cmd: "reply", Dat: []byte("pong data"), Vee: frame.Vee + 1}
+		repBuf,repErr := StructToBuf(reply)
+		if repErr != nil {
+			return errors.Wrap(err, "making reply buf")
 		}
+
+		// Frame the repBuf
+		repOuterBuf := []byte{0x51, 0x69}										// frame header, BMQLL key
+		repOuterBuf = append(repOuterBuf, b3.EncodeUvarint(len(repBuf))...)		// size of rest of messae
+		repOuterBuf = append(repOuterBuf, repBuf...)
+
+		n,wrerr := conn.Write(repOuterBuf)
+		if wrerr != nil {
+			return errors.Wrap(wrerr, "reply socket write failed")
+		}
+		fmt.Println("len repOuterBuf ",len(repOuterBuf))
+		fmt.Println("bytes sent      ",n)
+		// probably want this to be a loop, to ensure all the bytes get written.
 
 	}
 }
@@ -374,7 +394,7 @@ type SpudStruct struct {
 }
 
 
-func main() {
+func __main() {
 	fmt.Println("Golang side")
 	if bits.UintSize != 64 {
 		panic("            **** Not in a 64bit mode! ( set GOARCH=amd64 ) ***")
@@ -577,7 +597,7 @@ func must(err error) {
 	}
 }
 
-func _rx_main() {
+func main() {
 	//defer profile.Start().Stop()
 	fmt.Println("Golang side")
 	if bits.UintSize != 64 {
