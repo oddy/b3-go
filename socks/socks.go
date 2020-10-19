@@ -31,21 +31,25 @@ import (
 const TIMEOUT = 6 * time.Second			// testing
 const CONNECT_TIMEOUT = 15 * time.Second
 
-func ConnectLoop() {
+func ConnectLoop() {			// note we dont return the error atm, we are "top level"
 	for {
-		fmt.Println("(re)connecting...")
+		fmt.Println("connecting to server...")
 		conn, cerr := net.DialTimeout("tcp", "127.0.0.1:7777", CONNECT_TIMEOUT)
-		must(cerr)								// Connection fail is fatal.
+		if cerr != nil { // (re)Connection fail is fatal.
+			fmt.Println("Connect error ",cerr)
+			break
+		}
 		fmt.Println("Connected")
 
 		err := CommsLoop(conn)					// returns nil if we've been told to shut down.
 
 		_ = conn.Close()
+
 		if err == nil {
 			fmt.Println("Shutdown was requested, finishing")
 			break
 		}
-		fmt.Println("Comms error: ",err)
+		fmt.Println("Comms error: ",err," conn closed, trying reconnect")
 	}
 }
 
