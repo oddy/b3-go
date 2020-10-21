@@ -1,4 +1,4 @@
-module b3-go
+module github.com/oddy/b3-go
 
 go 1.13
 
